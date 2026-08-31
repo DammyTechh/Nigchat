@@ -1,0 +1,17 @@
+[package]
+name = "nigchat-domain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The dependency list IS the architecture boundary. There is no sqlx, no axum,
+# no redis and no utoipa here, and none may be added: the moment the domain
+# knows about a database driver or an HTTP framework, it stops being testable
+# in isolation and the layering is decorative.
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }

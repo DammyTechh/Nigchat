@@ -1,0 +1,86 @@
+# NigChat backend — Clean Architecture workspace.
+#
+# Dependency direction points INWARD and is enforced by these manifests, not by
+# convention:
+#
+#   server ──> api ──> application ──> domain
+#      └────> infrastructure ──────────┘
+#
+#   domain          knows nothing. No sqlx, no axum, no redis. Pure Rust.
+#   application     use cases. Talks to the outside world only through the
+#                   traits (ports) declared in domain.
+#   infrastructure  adapters that implement those ports: PostgreSQL, Redis,
+#                   FCM/APNs, SMS.
+#   api             HTTP/WebSocket delivery + OpenAPI. Knows use cases only.
+#   server          composition root. The only place that names concrete types.
+#
+# The practical payoff: swapping Redis Pub/Sub for Redpanda, or FCM for another
+# push provider, touches exactly one crate and zero business logic.
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/domain",
+    "crates/application",
+    "crates/infrastructure",
+    "crates/api",
+    "crates/server",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "Proprietary"
+
+[workspace.dependencies]
+nigchat-domain = { path = "crates/domain" }
+nigchat-application = { path = "crates/application" }
+nigchat-infrastructure = { path = "crates/infrastructure" }
+nigchat-api = { path = "crates/api" }
+
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
+
+axum = { version = "0.7", features = ["ws", "macros"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["trace", "cors", "limit", "timeout", "compression-gzip", "set-header"] }
+http = "1"
+
+utoipa = { version = "4", features = ["axum_extras", "uuid", "chrono"] }
+utoipa-swagger-ui = { version = "6", features = ["axum"] }
+
+sqlx = { version = "0.7", default-features = false, features = [
+    "runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "migrate", "macros",
+] }
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1.7", features = ["v4", "v7", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.8"
+
+jsonwebtoken = "9"
+argon2 = "0.5"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+rand = "0.8"
+subtle = "2"
+
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+thiserror = "1"
+anyhow = "1"
+dotenvy = "0.15"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

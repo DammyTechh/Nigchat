@@ -1,0 +1,33 @@
+[package]
+name = "nigchat-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# HTTP + WebSocket delivery and the OpenAPI document. Depends on `application`
+# for use cases and `domain` for types — never on `infrastructure`.
+[dependencies]
+nigchat-domain = { workspace = true }
+nigchat-application = { workspace = true }
+
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+http = { workspace = true }
+tokio = { workspace = true }
+# Only for the pub/sub subscriber that feeds the local socket hub.
+redis = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+
+utoipa = { workspace = true }
+utoipa-swagger-ui = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+base64 = { workspace = true }
+
+tracing = { workspace = true }
+anyhow = { workspace = true }

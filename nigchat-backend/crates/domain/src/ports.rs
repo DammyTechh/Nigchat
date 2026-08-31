@@ -1,0 +1,495 @@
+//! Ports.
+//!
+//! The application layer depends on these traits, never on PostgreSQL, Redis
+//! or a push SDK. Infrastructure implements them; `server` wires the concrete
+//! types together at startup.
+//!
+//! Two payoffs that justify the indirection:
+//!   * use cases are testable with in-memory fakes, no containers
+//!   * swapping Redis Pub/Sub for Redpanda, or FCM for another provider,
+//!     changes one adapter and zero business rules
+
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+
+use crate::entities::*;
+use crate::error::DomainResult;
+use crate::events::EventEnvelope;
+use crate::ids::*;
+use crate::notifications::NotificationPlan;
+use crate::values::{Cursor, PhoneNumber, Seq, Username};
+
+// ===========================================================================
+// Repositories
+// ===========================================================================
+
+#[async_trait]
+pub trait UserRepository: Send + Sync {
+    async fn find_by_id(&self, id: UserId) -> DomainResult<Option<User>>;
+    async fn find_by_phone(&self, phone: &PhoneNumber) -> DomainResult<Option<User>>;
+    async fn find_by_username(&self, username: &Username) -> DomainResult<Option<User>>;
+
+    /// Creates the account if the phone is new, otherwise returns the existing
+    /// one. Registration must be idempotent: a retried OTP verification cannot
+    /// create a second account.
+    async fn upsert_by_phone(
+        &self,
+        phone: &PhoneNumber,
+        phone_hash: &str,
+        display_name: &str,
+    ) -> DomainResult<User>;
+
+    async fn update_profile(
+        &self,
+        id: UserId,
+        display_name: Option<&str>,
+        about: Option<&str>,
+        username: Option<&Username>,
+        avatar_media_id: Option<MediaId>,
+    ) -> DomainResult<User>;
+
+    async fn touch_last_seen(&self, id: UserId) -> DomainResult<()>;
+
+    /// Contact discovery. Takes hashed numbers so the caller never sends, and
+    /// the server never logs, raw numbers of people who are not users.
+    async fn find_by_phone_hashes(&self, hashes: &[String]) -> DomainResult<Vec<User>>;
+
+    async fn privacy_settings(&self, id: UserId) -> DomainResult<PrivacySettings>;
+
+    async fn set_two_step_pin(&self, id: UserId, pin_hash: Option<&str>) -> DomainResult<()>;
+    async fn two_step_pin_hash(&self, id: UserId) -> DomainResult<Option<String>>;
+
+    async fn is_blocked(&self, blocker: UserId, blocked: UserId) -> DomainResult<bool>;
+    async fn blocked_by_any(&self, user: UserId, candidates: &[UserId]) -> DomainResult<Vec<UserId>>;
+    async fn block(&self, blocker: UserId, blocked: UserId) -> DomainResult<()>;
+    async fn unblock(&self, blocker: UserId, blocked: UserId) -> DomainResult<()>;
+}
+
+#[async_trait]
+pub trait DeviceRepository: Send + Sync {
+    async fn find_by_id(&self, id: DeviceId) -> DomainResult<Option<Device>>;
+    async fn list_active(&self, user_id: UserId) -> DomainResult<Vec<Device>>;
+
+    async fn register(
+        &self,
+        user_id: UserId,
+        platform: Platform,
+        device_name: Option<&str>,
+        app_version: Option<&str>,
+        is_primary: bool,
+    ) -> DomainResult<Device>;
+
+    async fn touch_active(&self, id: DeviceId, ip_hash: Option<&str>) -> DomainResult<()>;
+
+    /// Revokes the device and every session bound to it, in one transaction.
+    /// Doing these separately would leave a window where a revoked device can
+    /// still refresh.
+    async fn revoke(&self, id: DeviceId, reason: &str) -> DomainResult<()>;
+}
+
+/// Refresh-token sessions. Access tokens are stateless and never stored.
+#[async_trait]
+pub trait SessionRepository: Send + Sync {
+    async fn create(
+        &self,
+        user_id: UserId,
+        device_id: DeviceId,
+        token_hash: &str,
+        expires_at: DateTime<Utc>,
+    ) -> DomainResult<SessionId>;
+
+    async fn find_by_token_hash(&self, token_hash: &str) -> DomainResult<Option<StoredSession>>;
+
+    /// Atomically revokes `old` and links it to `new`, so the rotation chain
+    /// stays auditable and reuse of a spent token is detectable.
+    async fn rotate(&self, old: SessionId, new: SessionId) -> DomainResult<()>;
+
+    async fn revoke_session(&self, id: SessionId) -> DomainResult<()>;
+
+    /// Called when a spent refresh token is presented again. That means the
+    /// value leaked, so every session on the device dies.
+    async fn revoke_all_for_device(&self, device_id: DeviceId) -> DomainResult<u64>;
+}
+
+#[derive(Debug, Clone)]
+pub struct StoredSession {
+    pub id: SessionId,
+    pub user_id: UserId,
+    pub device_id: DeviceId,
+    pub expires_at: DateTime<Utc>,
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
+impl StoredSession {
+    pub fn is_revoked(&self) -> bool {
+        self.revoked_at.is_some()
+    }
+
+    pub fn is_expired(&self, now: DateTime<Utc>) -> bool {
+        self.expires_at <= now
+    }
+}
+
+#[async_trait]
+pub trait AuthChallengeRepository: Send + Sync {
+    async fn create(
+        &self,
+        phone: &PhoneNumber,
+        code_hash: &str,
+        expires_at: DateTime<Utc>,
+        ip_hash: Option<&str>,
+    ) -> DomainResult<ChallengeId>;
+
+    async fn latest_active(&self, phone: &PhoneNumber) -> DomainResult<Option<StoredChallenge>>;
+
+    async fn increment_attempts(&self, id: ChallengeId) -> DomainResult<i32>;
+
+    /// Returns false when the challenge was already consumed — that is how
+    /// two concurrent verifications of the same code are resolved.
+    async fn consume(&self, id: ChallengeId) -> DomainResult<bool>;
+}
+
+#[derive(Debug, Clone)]
+pub struct StoredChallenge {
+    pub id: ChallengeId,
+    pub code_hash: String,
+    pub attempts: i32,
+    pub expires_at: DateTime<Utc>,
+}
+
+/// E2EE key directory (spec §28). Public material only.
+#[async_trait]
+pub trait KeyRepository: Send + Sync {
+    async fn publish_identity_key(
+        &self,
+        device_id: DeviceId,
+        user_id: UserId,
+        identity_public_key: &[u8],
+        registration_id: i32,
+    ) -> DomainResult<i32>;
+
+    async fn publish_signed_prekey(
+        &self,
+        device_id: DeviceId,
+        key_id: i32,
+        public_key: &[u8],
+        signature: &[u8],
+    ) -> DomainResult<()>;
+
+    async fn upload_one_time_prekeys(
+        &self,
+        device_id: DeviceId,
+        keys: &[(i32, Vec<u8>)],
+    ) -> DomainResult<u64>;
+
+    /// Consumes one one-time prekey per device. A device with none left still
+    /// returns a bundle, with `one_time_prekey_id: None`.
+    async fn take_prekey_bundles(&self, user_id: UserId) -> DomainResult<Vec<PreKeyBundle>>;
+
+    /// Drives the top-up push: a device below the threshold must upload more
+    /// before it runs out entirely.
+    async fn one_time_prekey_count(&self, device_id: DeviceId) -> DomainResult<i64>;
+
+    async fn identity_keys_for(&self, user_id: UserId) -> DomainResult<Vec<DeviceIdentityKey>>;
+}
+
+#[async_trait]
+pub trait ConversationRepository: Send + Sync {
+    async fn find_by_id(&self, id: ConversationId) -> DomainResult<Option<Conversation>>;
+
+    /// Idempotent. Two users tapping "message" simultaneously on different
+    /// instances must end up in one conversation, not two.
+    async fn get_or_create_direct(
+        &self,
+        a: UserId,
+        b: UserId,
+    ) -> DomainResult<Conversation>;
+
+    async fn create_group(
+        &self,
+        creator: UserId,
+        title: &str,
+        description: Option<&str>,
+        members: &[UserId],
+    ) -> DomainResult<Conversation>;
+
+    async fn list_for_user(&self, user_id: UserId) -> DomainResult<Vec<ConversationSummary>>;
+
+    async fn membership(
+        &self,
+        conversation_id: ConversationId,
+        user_id: UserId,
+    ) -> DomainResult<Option<ConversationMember>>;
+
+    async fn active_member_ids(&self, conversation_id: ConversationId)
+        -> DomainResult<Vec<UserId>>;
+
+    async fn add_members(
+        &self,
+        conversation_id: ConversationId,
+        actor: UserId,
+        members: &[UserId],
+    ) -> DomainResult<Vec<UserId>>;
+
+    async fn remove_member(
+        &self,
+        conversation_id: ConversationId,
+        actor: UserId,
+        target: UserId,
+    ) -> DomainResult<()>;
+
+    async fn set_role(
+        &self,
+        conversation_id: ConversationId,
+        target: UserId,
+        role: MemberRole,
+    ) -> DomainResult<()>;
+
+    /// Monotonic: the mark only moves forward, so a late request from a laggy
+    /// device cannot resurrect old unread counts.
+    async fn advance_read_marker(
+        &self,
+        conversation_id: ConversationId,
+        user_id: UserId,
+        seq: Seq,
+    ) -> DomainResult<Seq>;
+
+    async fn advance_delivery_marker(
+        &self,
+        conversation_id: ConversationId,
+        user_id: UserId,
+        seq: Seq,
+    ) -> DomainResult<Seq>;
+
+    async fn head_seq(&self, conversation_id: ConversationId) -> DomainResult<Seq>;
+}
+
+#[async_trait]
+pub trait MessageRepository: Send + Sync {
+    /// Allocates the sequence number, writes the message, its mentions and
+    /// attachments, and the outbox row — all in one transaction.
+    ///
+    /// Returns `(message, was_created)`. `false` means this was an idempotent
+    /// replay of a `client_message_id` we already had, and the caller must not
+    /// fan out a second time.
+    async fn append(&self, message: NewMessage) -> DomainResult<(Message, bool)>;
+
+    async fn find_by_id(&self, id: MessageId) -> DomainResult<Option<Message>>;
+
+    async fn find_by_client_id(
+        &self,
+        conversation_id: ConversationId,
+        sender_id: UserId,
+        client_message_id: ClientMessageId,
+    ) -> DomainResult<Option<Message>>;
+
+    /// Keyset pagination over `seq`. Never OFFSET.
+    async fn page(
+        &self,
+        conversation_id: ConversationId,
+        cursor: Cursor,
+    ) -> DomainResult<(Vec<Message>, bool)>;
+
+    async fn edit(
+        &self,
+        id: MessageId,
+        editor: UserId,
+        ciphertext: &[u8],
+    ) -> DomainResult<Message>;
+
+    /// Soft delete. The row and its `seq` survive so other devices learn the
+    /// message is gone rather than finding a hole in the sequence.
+    async fn soft_delete(
+        &self,
+        id: MessageId,
+        actor: UserId,
+        for_everyone: bool,
+    ) -> DomainResult<Seq>;
+
+    async fn set_reaction(
+        &self,
+        message_id: MessageId,
+        user_id: UserId,
+        emoji: &str,
+        removed: bool,
+    ) -> DomainResult<()>;
+
+    async fn mentioned_users(&self, message_id: MessageId) -> DomainResult<Vec<UserId>>;
+}
+
+#[async_trait]
+pub trait NotificationRepository: Send + Sync {
+    async fn register_token(
+        &self,
+        user_id: UserId,
+        device_id: DeviceId,
+        provider: PushProvider,
+        token: &str,
+        is_voip: bool,
+        sandbox: bool,
+    ) -> DomainResult<NotificationTokenId>;
+
+    async fn active_tokens(&self, user_id: UserId) -> DomainResult<Vec<NotificationToken>>;
+
+    /// Providers report dead tokens. Marking rather than deleting keeps the
+    /// failure rate measurable (spec §16: invalid-token cleanup).
+    async fn invalidate_token(&self, token: &str) -> DomainResult<()>;
+    async fn record_token_failure(&self, token: &str) -> DomainResult<()>;
+
+    async fn preferences(&self, user_id: UserId) -> DomainResult<NotificationPreferences>;
+    async fn save_preferences(&self, prefs: &NotificationPreferences) -> DomainResult<()>;
+
+    async fn conversation_settings(
+        &self,
+        conversation_id: ConversationId,
+        user_id: UserId,
+    ) -> DomainResult<ConversationNotificationSettings>;
+
+    async fn save_conversation_settings(
+        &self,
+        settings: &ConversationNotificationSettings,
+    ) -> DomainResult<()>;
+
+    async fn list_tones(&self) -> DomainResult<Vec<NotificationTone>>;
+    async fn tone_exists(&self, tone_id: &str) -> DomainResult<bool>;
+
+    /// Idempotency for push: returns false when this exact notification was
+    /// already recorded, so a retried dispatch does not double-buzz a phone.
+    async fn record_delivery(
+        &self,
+        user_id: UserId,
+        device_id: Option<DeviceId>,
+        conversation_id: Option<ConversationId>,
+        message_seq: Option<Seq>,
+        category: &str,
+        status: &str,
+        suppressed_reason: Option<&str>,
+        provider: Option<&str>,
+        error: Option<&str>,
+    ) -> DomainResult<bool>;
+}
+
+#[async_trait]
+pub trait SecurityRepository: Send + Sync {
+    async fn record_event(&self, event: SecurityEvent) -> DomainResult<()>;
+    async fn recent_events(&self, user_id: UserId, limit: i64) -> DomainResult<Vec<SecurityEvent>>;
+}
+
+// ===========================================================================
+// Service ports
+// ===========================================================================
+
+/// Injected rather than calling `Utc::now()` directly, so time-dependent rules
+/// (quiet hours, token expiry, mute windows) are testable without sleeping.
+pub trait Clock: Send + Sync {
+    fn now(&self) -> DateTime<Utc>;
+}
+
+#[async_trait]
+pub trait RateLimiter: Send + Sync {
+    /// Consumes one unit. `Err(RateLimited)` when the budget is spent.
+    async fn check(&self, key: &str, limit: u32, window_seconds: u64) -> DomainResult<()>;
+
+    /// Clears a counter after a legitimate success, so one bad password
+    /// attempt does not count against a user for the rest of the window.
+    async fn reset(&self, key: &str) -> DomainResult<()>;
+}
+
+/// Cross-instance fan-out. Redis Pub/Sub today, Redpanda later — this trait is
+/// the seam that makes that swap a one-crate change.
+#[async_trait]
+pub trait EventPublisher: Send + Sync {
+    async fn publish(&self, envelope: EventEnvelope) -> DomainResult<()>;
+}
+
+/// Who is currently connected, across the whole fleet. Backed by Redis so any
+/// instance can answer, which is what the notification policy needs to know
+/// before deciding to send a push.
+#[async_trait]
+pub trait PresenceRegistry: Send + Sync {
+    async fn mark_online(&self, user_id: UserId, device_id: DeviceId) -> DomainResult<()>;
+    async fn mark_offline(&self, user_id: UserId, device_id: DeviceId) -> DomainResult<()>;
+    async fn is_online(&self, user_id: UserId) -> DomainResult<bool>;
+    async fn online_subset(&self, user_ids: &[UserId]) -> DomainResult<Vec<UserId>>;
+}
+
+#[async_trait]
+pub trait SmsSender: Send + Sync {
+    /// Sends the verification code. Implementations must never log the code
+    /// or the full number.
+    async fn send_verification_code(&self, phone: &PhoneNumber, code: &str) -> DomainResult<()>;
+}
+
+/// One push, already decided on. The adapter's job is transport only — every
+/// policy question was answered before it was called.
+#[derive(Debug, Clone)]
+pub struct PushMessage {
+    pub token: String,
+    pub provider: PushProvider,
+    pub title: String,
+    pub body: String,
+    pub plan: NotificationPlan,
+    /// Deep link target, e.g. `nigchat://conversation/{id}` (spec §16).
+    pub deep_link: Option<String>,
+    /// Silent payload the client uses to render the real content locally.
+    pub data: serde_json::Value,
+    /// Badge count for iOS.
+    pub badge: Option<i64>,
+    pub is_voip: bool,
+    pub sandbox: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PushOutcome {
+    Delivered { provider_message_id: Option<String> },
+    /// The token is dead and must be invalidated — the user uninstalled or
+    /// the token rotated.
+    TokenInvalid,
+    /// Transient. Safe to retry.
+    Retryable(String),
+    Failed(String),
+}
+
+#[async_trait]
+pub trait PushSender: Send + Sync {
+    fn provider(&self) -> PushProvider;
+    async fn send(&self, message: PushMessage) -> DomainResult<PushOutcome>;
+}
+
+/// Hashing for secrets at rest.
+///
+/// Two algorithms on purpose: Argon2id for anything a human chooses (PINs),
+/// HMAC-SHA256 for high-entropy machine-generated values (refresh tokens,
+/// OTPs, phone hashes) where a slow KDF buys nothing and costs latency on the
+/// hot path.
+pub trait Hasher: Send + Sync {
+    /// Argon2id. Slow by design.
+    fn hash_secret(&self, plaintext: &str) -> DomainResult<String>;
+    fn verify_secret(&self, plaintext: &str, hash: &str) -> DomainResult<bool>;
+
+    /// Keyed HMAC under a server-side pepper. Deterministic, so it can be
+    /// looked up by index.
+    fn hash_token(&self, plaintext: &str) -> String;
+
+    /// Peppered hash of a phone number for contact discovery.
+    fn hash_phone(&self, phone: &PhoneNumber) -> String;
+
+    /// For IP addresses in audit rows: enables anomaly detection without
+    /// retaining the address itself.
+    fn hash_ip(&self, ip: &str) -> String;
+}
+
+/// Access-token issuing and verification.
+pub trait TokenService: Send + Sync {
+    fn issue_access_token(&self, user_id: UserId, device_id: DeviceId) -> DomainResult<String>;
+    fn verify_access_token(&self, token: &str) -> DomainResult<AccessClaims>;
+    fn generate_refresh_token(&self) -> String;
+    fn access_token_ttl_seconds(&self) -> i64;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AccessClaims {
+    pub user_id: UserId,
+    pub device_id: DeviceId,
+    pub expires_at: i64,
+}

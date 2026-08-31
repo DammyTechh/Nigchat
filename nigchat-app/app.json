@@ -1,0 +1,101 @@
+{
+  "expo": {
+    "name": "NigChat",
+    "slug": "nigchat",
+    "version": "1.0.0",
+    "orientation": "default",
+    "scheme": "nigchat",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/icon.png",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/images/splash-light.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nigchat.app",
+      "userInterfaceStyle": "automatic",
+      "splash": {
+        "image": "./assets/images/splash-light.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#FFFFFF",
+        "dark": {
+          "image": "./assets/images/splash-dark.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0B120E"
+        }
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "NigChat uses the camera to scan the pairing code shown on nigchat.com, and to take photos to send.",
+        "NSPhotoLibraryUsageDescription": "NigChat needs access to your photos so you can share them in chats.",
+        "NSMicrophoneUsageDescription": "NigChat uses the microphone for voice notes and calls.",
+        "NSContactsUsageDescription": "NigChat matches your contacts so you can find people you already know. Numbers are hashed before they leave your device.",
+        "NSFaceIDUsageDescription": "NigChat uses Face ID to unlock locked chats.",
+        "ITSAppUsesNonExemptEncryption": true,
+        "UIViewControllerBasedStatusBarAppearance": true
+      }
+    },
+    "android": {
+      "package": "com.nigchat.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      },
+      "softwareKeyboardLayoutMode": "pan",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_CONTACTS",
+        "VIBRATE",
+        "POST_NOTIFICATIONS",
+        "USE_BIOMETRIC"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "NigChat uses the camera to scan the pairing code shown on the web app."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#0E7A46",
+          "defaultChannel": "messages"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-light.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF",
+          "dark": {
+            "image": "./assets/images/splash-dark.png",
+            "backgroundColor": "#0B120E"
+          }
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "NigChat uses Face ID to unlock the app and locked chats on this device."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

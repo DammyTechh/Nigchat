@@ -1,0 +1,128 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Design tokens.
+ *
+ * Identical values to the mobile app's `tokens.ts`, sampled from the logo
+ * artwork. Written as raw RGB triples so Tailwind can apply opacity modifiers,
+ * which the glass surfaces depend on.
+ */
+@layer base {
+  :root {
+    --bg: 255 255 255;
+    --surface: 255 255 255;
+    --raised: 247 249 248;
+    --pressed: 239 243 241;
+    --line: 227 233 229;
+    --line-strong: 203 213 207;
+
+    --ink: 19 26 22;
+    --ink-2: 74 87 79;
+    --ink-3: 107 122 114;
+
+    --brand: 14 122 70;
+    --brand-deep: 15 102 63;
+    --brand-soft: 230 244 236;
+    --accent: 34 197 94;
+
+    --bubble-out: 14 122 70;
+    --bubble-in: 247 249 248;
+
+    --danger: 220 38 38;
+    --warning: 217 119 6;
+
+    color-scheme: light;
+  }
+
+  /*
+   * Dark mode is a design, not an inversion. The background is #0B120E rather
+   * than pure black: on OLED, black behind a scrolling list smears, and every
+   * elevation step above it has to be faked with borders. The brand green also
+   * lifts, because the light-mode value fails contrast on a dark surface.
+   */
+  .dark {
+    --bg: 11 18 14;
+    --surface: 17 26 21;
+    --raised: 24 35 29;
+    --pressed: 31 44 37;
+    --line: 34 48 42;
+    --line-strong: 46 62 54;
+
+    --ink: 233 241 236;
+    --ink-2: 168 184 175;
+    --ink-3: 124 140 132;
+
+    --brand: 23 151 89;
+    --brand-deep: 18 122 70;
+    --brand-soft: 16 48 31;
+    --accent: 34 197 94;
+
+    --bubble-out: 18 110 66;
+    --bubble-in: 24 35 29;
+
+    --danger: 248 113 113;
+    --warning: 251 191 36;
+
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Visible focus for keyboard users only. A mouse click should not leave a
+     ring behind, but tabbing must always show where you are. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-bg;
+  }
+}
+
+@layer components {
+  /*
+   * Glass. One line on the web, because every current browser supports
+   * backdrop-filter — the Android caveat from the mobile app does not apply
+   * here. The translucent fill underneath is still required: blur reduces
+   * detail but not luminance, so text over a bright backdrop needs the tint.
+   */
+  .glass {
+    @apply bg-bg/70 backdrop-blur-xl backdrop-saturate-150;
+  }
+
+  .glass-strong {
+    @apply bg-bg/85 backdrop-blur-2xl backdrop-saturate-150;
+  }
+
+  /* Scrollbars: present but quiet. Hiding them costs discoverability on
+     desktop, where the scrollbar is a real affordance. */
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line-strong)) transparent;
+  }
+  .scroll-thin::-webkit-scrollbar {
+    width: 8px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-line-strong/60;
+  }
+  .scroll-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

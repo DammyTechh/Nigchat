@@ -1,0 +1,26 @@
+[package]
+name = "nigchat-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The composition root: the only crate that names concrete adapters. Everything
+# else depends on traits.
+[[bin]]
+name = "nigchat-server"
+path = "src/main.rs"
+
+[dependencies]
+nigchat-domain = { workspace = true }
+nigchat-application = { workspace = true }
+nigchat-infrastructure = { workspace = true }
+nigchat-api = { workspace = true }
+
+tokio = { workspace = true }
+axum = { workspace = true }
+redis = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+dotenvy = { workspace = true }
+uuid = { workspace = true }

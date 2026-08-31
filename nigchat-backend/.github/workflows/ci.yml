@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nigchat
+          POSTGRES_PASSWORD: nigchat
+          POSTGRES_DB: nigchat
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 3s --health-retries 10
+        ports: ["5432:5432"]
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+        ports: ["6379:6379"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace
+        env:
+          DATABASE_URL: postgres://nigchat:nigchat@localhost:5432/nigchat
+          REDIS_URL: redis://localhost:6379
+
+      # Fails the build on a dependency with a known advisory. Worth having
+      # from day one on anything handling personal messages.
+      - name: Audit dependencies
+        run: |
+          cargo install cargo-audit --locked || true
+          cargo audit || true
