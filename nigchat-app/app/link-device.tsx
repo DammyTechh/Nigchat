@@ -31,13 +31,34 @@ export default function LinkDeviceScreen() {
   const frameSize = Math.min(width * 0.68, 300);
 
   function onScanned({ data }: { data: string }) {
-    // The camera fires continuously; without this guard a single code would
-    // trigger the pairing request a dozen times.
+    // The camera fires continuously; without this guard one code would trigger
+    // the request a dozen times.
     if (handled.current) return;
     handled.current = true;
+
+    setCode(data.trim());
+    // Scanning is not consent. The user sees what they are authorising and
+    // confirms it — a QR pointed at a phone should never link an account on
+    // its own.
     setState('confirming');
-    // TODO: POST the scanned pairing code to /v1/devices/link once the
-    // backend's device-linking endpoints land.
+  }
+
+  async function confirmLink() {
+    if (!code) return;
+    setState('linking');
+    setError(null);
+
+    try {
+      await deviceLinks.approve(code);
+      setState('done');
+      // A beat so the browser's next poll picks up the approval before this
+      // screen disappears.
+      setTimeout(() => router.back(), 900);
+    } catch (err) {
+      setError((err as Error).message);
+      setState('confirming');
+      handled.current = false;
+    }
   }
 
   if (!permission) {

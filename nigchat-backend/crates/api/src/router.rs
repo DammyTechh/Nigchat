@@ -107,6 +107,15 @@ pub fn build_router(state: ApiState, config: RouterConfig) -> Router {
                 .patch(notifications::update_conversation_settings),
         )
         // messages
+        // calls — signalling only; media goes to the SFU
+        .route("/v1/calls", get(calls::history).post(calls::start))
+        .route("/v1/calls/:call_id/join", post(calls::join))
+        .route("/v1/calls/:call_id/end", post(calls::end))
+        // media
+        .route("/v1/media/uploads", post(media::request_upload))
+        .route("/v1/media/:media_id", get(media::get))
+        .route("/v1/media/:media_id/complete", post(media::complete))
+        // messages
         .route("/v1/messages", post(messages::send))
         .route(
             "/v1/messages/:message_id",

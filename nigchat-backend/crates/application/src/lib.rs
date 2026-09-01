@@ -12,10 +12,12 @@
 //!    its caller; the use case is the caller that must not be trusted blindly.
 
 pub mod auth;
+pub mod calls;
 pub mod conversations;
 pub mod device_links;
 pub mod devices;
 pub mod keys;
+pub mod media;
 pub mod messaging;
 pub mod notifications;
 pub mod services;

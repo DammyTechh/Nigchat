@@ -37,7 +37,7 @@ export const auth = {
 
 export const users = {
   me: () => api.get<Me>('/v1/me'),
-  updateMe: (body: Partial<Pick<Me, 'display_name' | 'about' | 'username'>>) =>
+  updateMe: (body: Partial<Pick<Me, 'display_name' | 'about' | 'username' | 'avatar_media_id'>>) =>
     api.patch<Me>('/v1/me', body),
   get: (id: string) => api.get<PublicUser>(`/v1/users/${id}`),
   byUsername: (username: string) => api.get<PublicUser>(`/v1/users/by-username/${username}`),
@@ -78,6 +78,35 @@ export const deviceLinks = {
     api.post<{ linked: boolean; device_id: string }>(
       `/v1/devices/link-requests/${code}/approve`,
     ),
+};
+
+export const media = {
+  requestUpload: (body: {
+    purpose: 'avatar' | 'attachment';
+    mime_type: string;
+    byte_size: number;
+    width?: number;
+    height?: number;
+    duration_ms?: number;
+  }) =>
+    api.post<{
+      media_id: string;
+      upload_url: string;
+      method: string;
+      headers: [string, string][];
+      expires_in: number;
+    }>('/v1/media/uploads', body),
+
+  complete: (mediaId: string, byte_size: number) =>
+    api.post<{
+      id: string;
+      mime_type: string;
+      byte_size: number;
+      url: string;
+    }>(`/v1/media/${mediaId}/complete`, { byte_size }),
+
+  get: (mediaId: string) =>
+    api.get<{ id: string; mime_type: string; url: string }>(`/v1/media/${mediaId}`),
 };
 
 export const conversations = {

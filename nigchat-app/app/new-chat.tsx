@@ -3,14 +3,8 @@ import React, { useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 
 import { conversations as conversationsApi } from '../src/api/endpoints';
-import { Avatar, EmptyState, Header, Icon, Input, Pressable, Screen, Text } from '../src/components';
+import { Avatar, EmptyState, Header, Input, Pressable, Screen, Text } from '../src/components';
 import { spacing, useColors } from '../src/theme';
-
-const ACTIONS = [
-  { icon: 'Users' as const, label: 'New group', hint: 'Message many people at once' },
-  { icon: 'Megaphone' as const, label: 'New channel', hint: 'Broadcast to followers' },
-  { icon: 'UserPlus' as const, label: 'Invite to NigChat', hint: 'Share a link' },
-];
 
 export default function NewChatScreen() {
   const router = useRouter();
@@ -50,24 +44,9 @@ export default function NewChatScreen() {
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
           query ? null : (
-            <View style={{ paddingBottom: spacing.sm }}>
-              {ACTIONS.map((action) => (
-                <Pressable key={action.label} onPress={() => {}} style={styles.action}>
-                  <View style={[styles.actionIcon, { backgroundColor: colors.primarySoft }]}>
-                    <Icon name={action.icon} size={19} color={colors.primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text variant="body">{action.label}</Text>
-                    <Text variant="footnote" tone="muted">
-                      {action.hint}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-              <Text variant="overline" tone="muted" style={styles.sectionLabel}>
-                Contacts on NigChat
-              </Text>
-            </View>
+            <Text variant="overline" tone="muted" style={styles.sectionLabel}>
+              Contacts on NigChat
+            </Text>
           )
         }
         renderItem={({ item }) => (

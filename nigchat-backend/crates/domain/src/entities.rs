@@ -446,6 +446,9 @@ pub struct Message {
     pub edited_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+    /// Populated when a message is read back. Empty on the write path.
+    #[serde(default)]
+    pub attachments: Vec<MessageAttachment>,
 }
 
 impl Message {
@@ -461,6 +464,34 @@ impl Message {
             && !self.is_deleted()
             && self.kind == MessageKind::Text
             && (now - self.created_at) < chrono::Duration::minutes(EDIT_WINDOW_MINUTES)
+    }
+}
+
+/// A file hanging off a message. Metadata only — the bytes live in object
+/// storage and the client resolves a URL from the id when it renders.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageAttachment {
+    pub media_id: MediaId,
+    pub mime_type: String,
+    pub byte_size: i64,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub duration_ms: Option<i32>,
+    pub position: i16,
+}
+
+impl MessageAttachment {
+    /// Drives how the bubble renders it: inline, as a player, or as a file row.
+    pub fn category(&self) -> &'static str {
+        if self.mime_type.starts_with("image/") {
+            "image"
+        } else if self.mime_type.starts_with("video/") {
+            "video"
+        } else if self.mime_type.starts_with("audio/") {
+            "audio"
+        } else {
+            "file"
+        }
     }
 }
 

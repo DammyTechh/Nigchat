@@ -1,8 +1,9 @@
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { Avatar, Header, Icon, ListRow, Pressable, Screen, Section, Text } from '../../src/components';
+import { media as mediaApi } from '../../src/api/endpoints';
 import { useAuth } from '../../src/store/auth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +16,18 @@ export default function SettingsScreen() {
   const { preference } = useTheme();
   const insets = useSafeAreaInsets();
   const me = useAuth((state) => state.me);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!me?.avatar_media_id) {
+      setAvatarUrl(null);
+      return;
+    }
+    mediaApi
+      .get(me.avatar_media_id)
+      .then((asset) => setAvatarUrl(asset.url))
+      .catch(() => {});
+  }, [me?.avatar_media_id]);
   const signOut = useAuth((state) => state.signOut);
 
   const themeLabel =
@@ -36,8 +49,8 @@ export default function SettingsScreen() {
       <Header title="You" large borderless />
 
       <View style={{ paddingHorizontal: spacing.base }}>
-        <Pressable onPress={() => {}} style={styles.profile}>
-          <Avatar name={me?.display_name ?? '?'} size="xl" />
+        <Pressable onPress={() => router.push('/settings/profile')} style={styles.profile}>
+          <Avatar name={me?.display_name ?? '?'} uri={avatarUrl} size="xl" />
           <View style={{ flex: 1, gap: 3 }}>
             <Text variant="title" numberOfLines={1}>
               {me?.display_name ?? 'Your name'}
@@ -69,7 +82,6 @@ export default function SettingsScreen() {
             chevron
             onPress={() => router.push('/settings/notifications')}
           />
-          <ListRow icon="Database" title="Storage and data" chevron onPress={() => {}} />
         </Section>
 
         <Section title="Privacy and security">
@@ -94,11 +106,6 @@ export default function SettingsScreen() {
             chevron
             onPress={() => router.push('/settings/devices')}
           />
-        </Section>
-
-        <Section title="Support">
-          <ListRow icon="CircleHelp" title="Help centre" chevron onPress={() => {}} />
-          <ListRow icon="UserPlus" title="Invite a friend" chevron onPress={() => {}} />
         </Section>
 
         <Section>

@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 
-import { Avatar, Button, Input, Pressable, Screen, Text, Icon } from '../../src/components';
+import { Avatar, Button, Input, Screen, Text } from '../../src/components';
 import { users } from '../../src/api/endpoints';
 import { useAuth } from '../../src/store/auth';
 import { spacing, useColors } from '../../src/theme';
@@ -45,14 +45,9 @@ export default function ProfileSetup() {
           </Text>
 
           <View style={styles.avatarBlock}>
-            <Pressable onPress={() => {}} highlight={false} accessibilityLabel="Add a photo">
-              <Avatar name={trimmed || '?'} size="xl" />
-              <View style={[styles.cameraBadge, { backgroundColor: colors.primary, borderColor: colors.background }]}>
-                <Icon name="Camera" size={14} color={colors.onPrimary} />
-              </View>
-            </Pressable>
+            <Avatar name={trimmed || '?'} size="xl" />
             <Text variant="footnote" tone="muted" style={{ marginTop: spacing.md }}>
-              Add a photo
+              Your initials for now — photos are coming
             </Text>
           </View>
 

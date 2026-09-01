@@ -19,7 +19,6 @@ import {
   Header,
   IconButton,
   MessageBubble,
-  Pressable,
   Screen,
   SystemNotice,
   Text,
@@ -160,12 +159,7 @@ export default function ChatScreen() {
         back
         borderless={false}
         center={
-          <Pressable
-            onPress={() => {}}
-            highlight={false}
-            style={styles.headerCenter}
-            accessibilityLabel={`${title}, open info`}
-          >
+            <View style={styles.headerCenter}>
             <Avatar name={title} size="sm" />
             <View style={{ flex: 1 }}>
               <Text variant="titleSmall" numberOfLines={1}>
@@ -179,12 +173,11 @@ export default function ChatScreen() {
                 {subtitle}
               </Text>
             </View>
-          </Pressable>
+          </View>
         }
-        actions={[
-          { icon: 'Video', label: 'Video call', onPress: () => {} },
-          { icon: 'Phone', label: 'Voice call', onPress: () => {} },
-        ]}
+        // Call buttons return when calling exists. A phone icon that does
+        // nothing is worse than no phone icon.
+        actions={[]}
       />
 
       <KeyboardAvoidingView
@@ -262,8 +255,6 @@ export default function ChatScreen() {
             { paddingBottom: Math.max(insets.bottom, spacing.sm) },
           ]}
         >
-          <IconButton icon="Plus" onPress={() => {}} accessibilityLabel="Attach" size={40} />
-
           <View style={[styles.field, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
             <TextInput
               value={draft}
@@ -274,28 +265,20 @@ export default function ChatScreen() {
               multiline
               maxLength={4096}
             />
-            <IconButton
-              icon="Smile"
-              size={32}
-              onPress={() => {}}
-              accessibilityLabel="Emoji"
-            />
           </View>
 
           {/* The send button only becomes green and solid once there is
               something to send — the affordance appears exactly when it means
               something. */}
-          {draft.trim() ? (
-            <IconButton
-              icon="ArrowUp"
-              variant="filled"
-              size={44}
-              onPress={submit}
-              accessibilityLabel="Send"
-            />
-          ) : (
-            <IconButton icon="Mic" size={44} onPress={() => {}} accessibilityLabel="Record voice message" />
-          )}
+          {/* Only appears when there is something to send. Attachments and
+              voice notes return once media upload exists. */}
+          <IconButton
+            icon="ArrowUp"
+            variant={draft.trim() ? 'filled' : 'ghost'}
+            size={44}
+            onPress={submit}
+            accessibilityLabel="Send"
+          />
         </Glass>
       </KeyboardAvoidingView>
     </Screen>

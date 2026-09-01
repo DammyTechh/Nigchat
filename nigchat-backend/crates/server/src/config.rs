@@ -34,6 +34,18 @@ pub struct Config {
     pub sms_api_key: Option<String>,
     pub sms_sender_id: String,
 
+    /// Object storage. Optional — without it the media endpoints refuse
+    /// cleanly rather than the whole service failing to start.
+    pub supabase_url: Option<String>,
+    pub supabase_service_key: Option<String>,
+    pub media_bucket: String,
+
+    /// LiveKit — the SFU that carries call audio and video. Optional; without
+    /// it the call endpoints refuse cleanly and everything else still runs.
+    pub livekit_url: Option<String>,
+    pub livekit_api_key: Option<String>,
+    pub livekit_api_secret: Option<String>,
+
     pub fcm_project_id: Option<String>,
     pub fcm_access_token: Option<String>,
     pub apns_topic: Option<String>,
@@ -74,6 +86,12 @@ impl Config {
             sms_endpoint: optional("SMS_ENDPOINT"),
             sms_api_key: optional("SMS_API_KEY"),
             sms_sender_id: optional("SMS_SENDER_ID").unwrap_or_else(|| "NigChat".to_string()),
+            supabase_url: optional("SUPABASE_URL"),
+            supabase_service_key: optional("SUPABASE_SERVICE_KEY"),
+            media_bucket: optional("MEDIA_BUCKET").unwrap_or_else(|| "media".to_string()),
+            livekit_url: optional("LIVEKIT_URL"),
+            livekit_api_key: optional("LIVEKIT_API_KEY"),
+            livekit_api_secret: optional("LIVEKIT_API_SECRET"),
             fcm_project_id: optional("FCM_PROJECT_ID"),
             fcm_access_token: optional("FCM_ACCESS_TOKEN"),
             apns_topic: optional("APNS_TOPIC"),

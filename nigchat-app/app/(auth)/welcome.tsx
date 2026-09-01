@@ -6,21 +6,30 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Button, Icon, Screen, Text } from '../../src/components';
 import { spacing, useColors } from '../../src/theme';
 
+/**
+ * Every claim here is one the product actually delivers today.
+ *
+ * The previous version said "Every message is encrypted on your device. Not even
+ * we can read them." That is not true yet — the transport carries base64, which
+ * is encoding, not encryption. Shipping a privacy claim you cannot back is how
+ * a small app ends up in a story it does not want to be in, so it is gone until
+ * the Signal layer is real.
+ */
 const HIGHLIGHTS = [
   {
-    icon: 'ShieldCheck' as const,
-    title: 'Private by default',
-    body: 'Every message is encrypted on your device. Not even we can read them.',
+    icon: 'SignalHigh' as const,
+    title: 'Works on one bar',
+    body: 'Send on a weak signal. Your message arrives once, even if the app retries.',
   },
   {
-    icon: 'Zap' as const,
-    title: 'Built for real networks',
-    body: 'Messages send on one bar and arrive once — never twice.',
+    icon: 'EyeOff' as const,
+    title: 'You decide what shows',
+    body: 'Hide when you were last online. Read messages without a receipt going back.',
   },
   {
     icon: 'MonitorSmartphone' as const,
-    title: 'Continue anywhere',
-    body: 'Scan a code to carry the same conversation onto your laptop.',
+    title: 'Phone and laptop',
+    body: 'Scan a code and carry the same conversation to a bigger screen.',
   },
 ];
 

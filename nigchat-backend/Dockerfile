@@ -1,5 +1,7 @@
 # ---- build ----------------------------------------------------------------
-FROM rust:1.79-slim AS builder
+# 1.85+ is required: the dependency tree contains crates using edition 2024.
+# `1-slim` tracks the latest stable 1.x, which is what rust-toolchain.toml asks for.
+FROM rust:1-slim AS builder
 
 WORKDIR /build
 RUN apt-get update \

@@ -19,6 +19,8 @@ use nigchat_domain::entities::PushProvider;
 use nigchat_domain::ports::PushSender;
 use nigchat_infrastructure::push::{ApnsSender, FcmSender, NoopPushSender};
 use nigchat_infrastructure::sms::{HttpSmsSender, LoggingSmsSender};
+use nigchat_infrastructure::livekit::LiveKitTokens;
+use nigchat_infrastructure::storage::SupabaseStorage;
 use nigchat_infrastructure::{
     Argon2Hasher, JwtTokenService, PostgresRepositories, RedisEventPublisher, RedisPresence,
     RedisRateLimiter, SystemClock,
@@ -76,6 +78,42 @@ async fn main() -> anyhow::Result<()> {
 
     let push = build_push_senders(&config);
 
+    let storage: Option<Arc<dyn nigchat_domain::ports::ObjectStorage>> =
+        match (&config.supabase_url, &config.supabase_service_key) {
+            (Some(url), Some(key)) => {
+                tracing::info!(bucket = %config.media_bucket, "object storage enabled");
+                Some(Arc::new(SupabaseStorage::new(
+                    url.clone(),
+                    key.clone(),
+                    config.media_bucket.clone(),
+                )))
+            }
+            _ => {
+                // Not fatal. Messaging works; uploads return a clear error.
+                tracing::warn!("object storage not configured; media uploads disabled");
+                None
+            }
+        };
+
+    let media_server: Option<Arc<dyn nigchat_domain::ports::MediaServerTokens>> = match (
+        &config.livekit_url,
+        &config.livekit_api_key,
+        &config.livekit_api_secret,
+    ) {
+        (Some(url), Some(key), Some(secret)) => {
+            tracing::info!(url = %url, "calling enabled");
+            Some(Arc::new(LiveKitTokens::new(
+                key.clone(),
+                secret.clone(),
+                url.clone(),
+            )))
+        }
+        _ => {
+            tracing::warn!("LiveKit not configured; calling disabled");
+            None
+        }
+    };
+
     let services = Services {
         users: repositories.users.clone(),
         devices: repositories.devices.clone(),
@@ -87,6 +125,8 @@ async fn main() -> anyhow::Result<()> {
         notifications: repositories.notifications.clone(),
         security: repositories.security.clone(),
         device_links: repositories.device_links.clone(),
+        media: repositories.media.clone(),
+        calls: repositories.calls.clone(),
         clock: Arc::new(SystemClock),
         rate_limiter: Arc::new(RedisRateLimiter::new(redis.clone())),
         events: Arc::new(RedisEventPublisher::new(
@@ -96,6 +136,8 @@ async fn main() -> anyhow::Result<()> {
         presence: Arc::new(RedisPresence::new(redis.clone())),
         sms,
         hasher: Arc::new(Argon2Hasher::new(config.hash_pepper.clone())),
+        storage,
+        media_server,
         tokens: Arc::new(JwtTokenService::new(
             &config.jwt_secret,
             config.access_token_ttl_seconds,

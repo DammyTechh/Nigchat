@@ -16,6 +16,9 @@ services:
     healthCheckPath: /healthz
     autoDeploy: true
 
+    domains:
+      - api.nigchat.com
+
     envVars:
       - key: BIND_ADDR
         value: 0.0.0.0:8080
@@ -54,15 +57,31 @@ services:
       - key: TRUST_PROXY_HEADERS
         value: "true"
 
+      # Every origin here may make credentialed calls on behalf of a signed-in
+      # user. Keep preview URLs out of it.
       - key: CORS_ALLOWED_ORIGINS
-        sync: false          # e.g. https://app.nigchat.com
+        value: https://app.nigchat.com,https://nigchat.com
 
       - key: SMS_ENDPOINT
-        value: https://api.ng.termii.com/api/sms/send
+        value: https://v4.api.termii.com/api/sms/send
       - key: SMS_API_KEY
         sync: false
       - key: SMS_SENDER_ID
         value: NigChat
+
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: MEDIA_BUCKET
+        value: media
+
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
 
       - key: FCM_PROJECT_ID
         sync: false

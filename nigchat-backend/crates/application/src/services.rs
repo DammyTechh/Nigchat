@@ -21,6 +21,8 @@ pub struct Services {
     pub notifications: Arc<dyn NotificationRepository>,
     pub security: Arc<dyn SecurityRepository>,
     pub device_links: Arc<dyn DeviceLinkRepository>,
+    pub media: Arc<dyn MediaRepository>,
+    pub calls: Arc<dyn CallRepository>,
 
     // services
     pub clock: Arc<dyn Clock>,
@@ -29,6 +31,12 @@ pub struct Services {
     pub presence: Arc<dyn PresenceRegistry>,
     pub sms: Arc<dyn SmsSender>,
     pub hasher: Arc<dyn Hasher>,
+    /// `None` when no bucket is configured — media endpoints then refuse
+    /// cleanly instead of the whole service failing to start.
+    pub storage: Option<Arc<dyn ObjectStorage>>,
+    /// `None` when no SFU is configured — calls then refuse cleanly instead of
+    /// the service failing to start.
+    pub media_server: Option<Arc<dyn MediaServerTokens>>,
     pub tokens: Arc<dyn TokenService>,
     /// One per provider. Empty in tests and in deployments without push
     /// credentials — dispatch degrades to "suppressed, no valid token" rather

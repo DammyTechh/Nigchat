@@ -1,0 +1,12 @@
+# Keeps the build context small. `target/` alone can be several GB and is
+# uploaded on every deploy without this.
+target/
+.git/
+.github/
+*.md
+.env
+.env.*
+!.env.example
+deploy/
+docker-compose.yml
+smoke-test.ps1

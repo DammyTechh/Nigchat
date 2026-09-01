@@ -11,6 +11,10 @@ use crate::error::{ErrorDetail, ErrorResponse};
 use crate::routes::device_links::{
     ApproveLinkResponse, CreateLinkRequest, CreateLinkResponse, LinkStatusResponse,
 };
+use crate::routes::calls::{
+    CallHistoryEntry, CallTicketResponse, EndCallRequest, StartCallRequest,
+};
+use crate::routes::media::{CompleteRequest, MediaResponse, UploadRequest, UploadResponse};
 use crate::routes::dto::*;
 
 #[derive(OpenApi)]
@@ -96,6 +100,13 @@ never on `message`** — messages are for humans and may be reworded.
         crate::routes::conversations::mute,
         crate::routes::conversations::mark_delivered,
         crate::routes::conversations::mark_read,
+        crate::routes::calls::start,
+        crate::routes::calls::join,
+        crate::routes::calls::end,
+        crate::routes::calls::history,
+        crate::routes::media::request_upload,
+        crate::routes::media::complete,
+        crate::routes::media::get,
         crate::routes::messages::send,
         crate::routes::messages::list,
         crate::routes::messages::edit,
@@ -119,6 +130,8 @@ never on `message`** — messages are for humans and may be reworded.
         CreateLinkRequest, CreateLinkResponse, LinkStatusResponse, ApproveLinkResponse,
         ConversationResponse, ConversationSummaryResponse, CreateDirectRequest,
         CreateGroupRequest, AddMembersRequest, SetRoleRequest, MuteRequest, MarkReadRequest, MarkDeliveredRequest,
+        StartCallRequest, CallTicketResponse, EndCallRequest, CallHistoryEntry,
+        UploadRequest, UploadResponse, CompleteRequest, MediaResponse,
         MessageResponse, SendMessageRequest, EditMessageRequest, ReactionRequest, MessagePage,
         NotificationToneResponse, NotificationPreferencesResponse, QuietHoursDto,
         UpdateNotificationPreferencesRequest, ConversationNotificationResponse,
@@ -134,6 +147,8 @@ never on `message`** — messages are for humans and may be reworded.
         (name = "conversations", description = "Direct chats, groups and channels"),
         (name = "messages", description = "Sending, reading, editing, reactions"),
         (name = "notifications", description = "Push tokens, tones, quiet hours, per-chat overrides"),
+        (name = "calls", description = "Voice and video signalling"),
+        (name = "media", description = "Uploads and downloads"),
         (name = "encryption", description = "End-to-end encryption key directory"),
         (name = "security", description = "Security timeline"),
         (name = "system", description = "Health and readiness"),

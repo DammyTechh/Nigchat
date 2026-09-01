@@ -95,6 +95,8 @@ impl MessageRow {
             edited_at: self.edited_at,
             deleted_at: self.deleted_at,
             created_at: self.created_at,
+            // Filled in by `attach_media` for read paths; empty on write.
+            attachments: Vec::new(),
         })
     }
 }
@@ -593,6 +595,34 @@ impl PgMessageRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
+
+    /// Attaches media to a batch of already-loaded messages. Kept separate so
+    /// the write path never pays for it.
+    async fn hydrate_attachments(&self, messages: &mut [Message]) -> DomainResult<()> {
+        if messages.is_empty() {
+            return Ok(());
+        }
+
+        let ids: Vec<MessageId> = messages.iter().map(|m| m.id).collect();
+        let attachments = self.attachments_for(&ids).await?;
+        if attachments.is_empty() {
+            return Ok(());
+        }
+
+        let mut grouped: std::collections::HashMap<MessageId, Vec<MessageAttachment>> =
+            std::collections::HashMap::new();
+        for (message_id, attachment) in attachments {
+            grouped.entry(message_id).or_default().push(attachment);
+        }
+
+        for message in messages.iter_mut() {
+            if let Some(found) = grouped.remove(&message.id) {
+                message.attachments = found;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -748,7 +778,13 @@ impl MessageRepository for PgMessageRepository {
         .await
         .map_err(map_sqlx)?;
 
-        row.map(MessageRow::into_entity).transpose()
+        let Some(row) = row else { return Ok(None) };
+        let mut message = row.into_entity()?;
+        let mut batch = [message.clone()];
+        self.hydrate_attachments(&mut batch).await?;
+        message.attachments = batch[0].attachments.clone();
+
+        Ok(Some(message))
     }
 
     async fn find_by_client_id(
@@ -809,11 +845,13 @@ impl MessageRepository for PgMessageRepository {
         .map_err(map_sqlx)?;
 
         let has_more = rows.len() as i64 > cursor.limit;
-        let messages = rows
+        let mut messages = rows
             .into_iter()
             .take(cursor.limit as usize)
             .map(MessageRow::into_entity)
             .collect::<DomainResult<Vec<_>>>()?;
+
+        self.hydrate_attachments(&mut messages).await?;
 
         Ok((messages, has_more))
     }
@@ -950,6 +988,64 @@ impl MessageRepository for PgMessageRepository {
             .map_err(map_sqlx)?;
         }
         Ok(())
+    }
+
+    /// One query for the whole page. `= ANY($1)` rather than a loop, because
+    /// a 50-message page would otherwise be 51 round trips.
+    async fn attachments_for(
+        &self,
+        message_ids: &[MessageId],
+    ) -> DomainResult<Vec<(MessageId, MessageAttachment)>> {
+        if message_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        #[derive(FromRow)]
+        struct Row {
+            message_id: Uuid,
+            media_id: Uuid,
+            mime_type: String,
+            byte_size: i64,
+            width: Option<i32>,
+            height: Option<i32>,
+            duration_ms: Option<i32>,
+            position: i16,
+        }
+
+        let ids: Vec<Uuid> = message_ids.iter().copied().map(MessageId::as_uuid).collect();
+
+        let rows = sqlx::query_as::<_, Row>(
+            r#"
+            SELECT ma.message_id, ma.media_id, m.mime_type, m.byte_size,
+                   m.width, m.height, m.duration_ms, ma.position
+            FROM message_attachments ma
+            JOIN media_assets m ON m.id = ma.media_id
+            WHERE ma.message_id = ANY($1) AND m.upload_status = 'complete'
+            ORDER BY ma.message_id, ma.position
+            "#,
+        )
+        .bind(&ids)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                (
+                    MessageId::from(row.message_id),
+                    MessageAttachment {
+                        media_id: MediaId::from(row.media_id),
+                        mime_type: row.mime_type,
+                        byte_size: row.byte_size,
+                        width: row.width,
+                        height: row.height,
+                        duration_ms: row.duration_ms,
+                        position: row.position,
+                    },
+                )
+            })
+            .collect())
     }
 
     async fn mentioned_users(&self, message_id: MessageId) -> DomainResult<Vec<UserId>> {

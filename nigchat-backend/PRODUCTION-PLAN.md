@@ -53,7 +53,7 @@ is a few naira per SMS after that.
 The backend already speaks to it. Set three variables and restart:
 
 ```
-SMS_ENDPOINT=https://api.ng.termii.com/api/sms/send
+SMS_ENDPOINT=https://v4.api.termii.com/api/sms/send
 SMS_API_KEY=your_key
 SMS_SENDER_ID=NigChat
 OTP_DEBUG_ECHO=false

@@ -76,6 +76,12 @@
         {
           "faceIDPermission": "NigChat uses Face ID to unlock the app and locked chats on this device."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "NigChat needs access to your photos so you can set a profile picture and share images in chats."
+        }
       ]
     ],
     "experiments": {

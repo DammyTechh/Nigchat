@@ -48,6 +48,14 @@ impl HttpSmsSender {
 #[async_trait]
 impl SmsSender for HttpSmsSender {
     async fn send_verification_code(&self, phone: &PhoneNumber, code: &str) -> DomainResult<()> {
+        // Termii v4. Two fields decide whether this arrives at all:
+        //
+        //   channel: "dnd"  Most Nigerian numbers sit on the do-not-disturb
+        //                   list. The "generic" channel is silently dropped for
+        //                   them, which looks exactly like a code that never
+        //                   came. DND routes cost more and deliver.
+        //   from            Must be an approved sender ID. Approval takes a day
+        //                   or two; until then Termii's generic sender works.
         let body = serde_json::json!({
             "to": phone.as_str(),
             "from": self.sender_id,
@@ -68,13 +76,28 @@ impl SmsSender for HttpSmsSender {
                 DomainError::infrastructure("could not send verification code")
             })?;
 
-        if !response.status().is_success() {
-            // Status only. The response body can echo the message, which
-            // contains the code.
-            tracing::error!(status = %response.status(), "SMS provider rejected the request");
+        let status = response.status();
+
+        if !status.is_success() {
+            // Status only, never the body: Termii echoes the message back, and
+            // the message contains the verification code.
+            tracing::error!(%status, "SMS provider rejected the request");
             return Err(DomainError::infrastructure(
                 "could not send verification code",
             ));
+        }
+
+        // Termii answers 200 even when it refuses the message — an unapproved
+        // sender ID, an empty wallet, an unroutable number. The outcome is in
+        // the body, so a 200 alone is not proof of anything.
+        if let Ok(payload) = response.json::<serde_json::Value>().await {
+            let code_field = payload.get("code").and_then(|v| v.as_str());
+            if let Some(reason) = code_field.filter(|c| *c != "ok") {
+                tracing::error!(reason, "SMS provider accepted the request but did not send");
+                return Err(DomainError::infrastructure(
+                    "could not send verification code",
+                ));
+            }
         }
 
         tracing::info!(phone = %phone, "verification SMS dispatched");

@@ -4,10 +4,12 @@
 //! PostgreSQL, Redis, FCM or APNs.
 
 pub mod crypto;
+pub mod livekit;
 pub mod postgres;
 pub mod push;
 pub mod realtime;
 pub mod sms;
+pub mod storage;
 
 pub use crypto::{Argon2Hasher, JwtTokenService, SystemClock};
 pub use postgres::PostgresRepositories;

@@ -59,13 +59,6 @@ export default function SecurityScreen() {
             onPress={() => router.push('/settings/two-step')}
           />
           <ListRow
-            icon="Fingerprint"
-            title="Passkey"
-            subtitle="Sign in with Face ID instead of a code"
-            chevron
-            onPress={() => {}}
-          />
-          <ListRow
             icon="BellRing"
             title="Security notifications"
             subtitle="Always on — cannot be disabled"

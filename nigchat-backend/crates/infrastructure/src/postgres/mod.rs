@@ -10,9 +10,11 @@
 //! * Repositories trust their caller. Authorization belongs to the use case;
 //!   duplicating it here would let the two copies drift apart.
 
+mod calls;
 mod conversations;
 mod device_links;
 mod identity;
+mod media;
 mod keys;
 mod notifications;
 
@@ -37,6 +39,8 @@ pub struct PostgresRepositories {
     pub notifications: Arc<dyn NotificationRepository>,
     pub security: Arc<dyn SecurityRepository>,
     pub device_links: Arc<dyn DeviceLinkRepository>,
+    pub media: Arc<dyn MediaRepository>,
+    pub calls: Arc<dyn CallRepository>,
 }
 
 impl PostgresRepositories {
@@ -59,6 +63,8 @@ impl PostgresRepositories {
             challenges: Arc::new(identity::PgChallengeRepository::new(pool.clone())),
             security: Arc::new(identity::PgSecurityRepository::new(pool.clone())),
             device_links: Arc::new(device_links::PgDeviceLinkRepository::new(pool.clone())),
+            media: Arc::new(media::PgMediaRepository::new(pool.clone())),
+            calls: Arc::new(calls::PgCallRepository::new(pool.clone())),
             keys: Arc::new(keys::PgKeyRepository::new(pool.clone())),
             conversations: Arc::new(conversations::PgConversationRepository::new(pool.clone())),
             messages: Arc::new(conversations::PgMessageRepository::new(pool.clone())),

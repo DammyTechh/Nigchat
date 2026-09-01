@@ -337,6 +337,13 @@ pub trait MessageRepository: Send + Sync {
     ) -> DomainResult<()>;
 
     async fn mentioned_users(&self, message_id: MessageId) -> DomainResult<Vec<UserId>>;
+
+    /// Attachments for a batch of messages, in one query. Fetching per message
+    /// would turn a 50-message page into 51 round trips.
+    async fn attachments_for(
+        &self,
+        message_ids: &[MessageId],
+    ) -> DomainResult<Vec<(MessageId, MessageAttachment)>>;
 }
 
 #[async_trait]
@@ -435,6 +442,152 @@ pub struct PendingLink {
 pub struct ApprovedLink {
     pub user_id: UserId,
     pub device_id: DeviceId,
+}
+
+/// Object storage.
+///
+/// Bytes never pass through the API. The client is handed a short-lived signed
+/// URL and uploads straight to storage — otherwise every photo would occupy an
+/// API worker for the duration of a mobile upload, and autoscaling stops
+/// meaning anything.
+#[async_trait]
+pub trait ObjectStorage: Send + Sync {
+    /// A URL the client can `PUT` to, valid for a few minutes.
+    async fn signed_upload(&self, key: &str, content_type: &str) -> DomainResult<SignedUpload>;
+
+    /// Where to read it back from. Public for avatars; signed and expiring for
+    /// anything in a conversation.
+    async fn download_url(&self, key: &str, public: bool) -> DomainResult<String>;
+
+    async fn delete(&self, key: &str) -> DomainResult<()>;
+}
+
+#[derive(Debug, Clone)]
+pub struct SignedUpload {
+    pub url: String,
+    pub method: String,
+    /// Headers the client must send with the PUT, verbatim.
+    pub headers: Vec<(String, String)>,
+    pub expires_in_seconds: i64,
+}
+
+#[async_trait]
+pub trait MediaRepository: Send + Sync {
+    async fn create_pending(&self, media: NewMedia) -> DomainResult<MediaAsset>;
+    async fn find(&self, id: MediaId) -> DomainResult<Option<MediaAsset>>;
+
+    /// Flips `pending` to `complete`. Returns false if the row is gone or was
+    /// already completed, so a replayed call is a no-op rather than a reset.
+    async fn mark_complete(&self, id: MediaId, owner: UserId, byte_size: i64)
+        -> DomainResult<bool>;
+
+    /// Uploads that were started and never finished. A sweeper deletes them;
+    /// without this, every abandoned upload is storage you pay for forever.
+    async fn stale_pending(&self, older_than_minutes: i64) -> DomainResult<Vec<MediaAsset>>;
+    async fn delete(&self, id: MediaId) -> DomainResult<()>;
+}
+
+#[derive(Debug, Clone)]
+pub struct NewMedia {
+    pub owner_id: UserId,
+    pub bucket: String,
+    pub key: String,
+    pub mime_type: String,
+    pub byte_size: i64,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub duration_ms: Option<i32>,
+    /// Avatars are stored unencrypted in a public bucket; conversation media is
+    /// encrypted on the device before upload.
+    pub is_encrypted: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct MediaAsset {
+    pub id: MediaId,
+    pub owner_id: Option<UserId>,
+    pub bucket: String,
+    pub key: String,
+    pub mime_type: String,
+    pub byte_size: i64,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub duration_ms: Option<i32>,
+    pub is_encrypted: bool,
+    pub upload_status: String,
+    pub created_at: DateTime<Utc>,
+}
+
+impl MediaAsset {
+    pub fn is_complete(&self) -> bool {
+        self.upload_status == "complete"
+    }
+}
+
+/// Calls (spec §29).
+///
+/// This service stores *who called whom and when*. It never touches audio or
+/// video — that goes through an SFU, which is a separate piece of
+/// infrastructure the same way Termii is for SMS.
+#[async_trait]
+pub trait CallRepository: Send + Sync {
+    async fn start(
+        &self,
+        conversation_id: Option<ConversationId>,
+        initiator: UserId,
+        kind: &str,
+        is_group: bool,
+        room: &str,
+        participants: &[UserId],
+    ) -> DomainResult<CallSession>;
+
+    async fn find(&self, id: CallId) -> DomainResult<Option<CallSession>>;
+
+    /// Marks a participant joined. Returns false when they were not invited,
+    /// which is what stops someone joining a room they merely learned the name
+    /// of.
+    async fn mark_joined(&self, call_id: CallId, user_id: UserId) -> DomainResult<bool>;
+
+    async fn mark_left(&self, call_id: CallId, user_id: UserId) -> DomainResult<()>;
+
+    /// Ends the call and returns the participants, so the caller can tell every
+    /// device to stop ringing.
+    async fn end(&self, call_id: CallId, reason: &str) -> DomainResult<Vec<UserId>>;
+
+    async fn history(&self, user_id: UserId, limit: i64) -> DomainResult<Vec<CallSession>>;
+}
+
+#[derive(Debug, Clone)]
+pub struct CallSession {
+    pub id: CallId,
+    pub conversation_id: Option<ConversationId>,
+    pub initiator_id: Option<UserId>,
+    pub kind: String,
+    pub is_group: bool,
+    /// Room name on the media server.
+    pub room: String,
+    pub started_at: DateTime<Utc>,
+    pub answered_at: Option<DateTime<Utc>>,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub end_reason: Option<String>,
+    pub participants: Vec<UserId>,
+}
+
+impl CallSession {
+    pub fn is_active(&self) -> bool {
+        self.ended_at.is_none()
+    }
+}
+
+/// Mints access tokens for the media server.
+///
+/// The token is what authorises a device to publish and subscribe in one room.
+/// It is short-lived and scoped to a single room, so a leaked one is useless
+/// elsewhere and expires quickly.
+pub trait MediaServerTokens: Send + Sync {
+    fn issue(&self, room: &str, identity: &str, display_name: &str) -> DomainResult<String>;
+    /// Where the client connects, e.g. wss://your-project.livekit.cloud
+    fn server_url(&self) -> &str;
 }
 
 #[async_trait]
