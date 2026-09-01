@@ -172,7 +172,7 @@ async function request<T>(path: string, options: Options = {}, retrying = false)
 }
 
 export const api = {
-  get: <T,>(path: string) => request<T>(path),
+  get: <T,>(path: string, options?: Options) => request<T>(path, options),
   post: <T,>(path: string, body?: unknown, options?: Options) =>
     request<T>(path, { ...options, method: 'POST', body }),
   patch: <T,>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body }),

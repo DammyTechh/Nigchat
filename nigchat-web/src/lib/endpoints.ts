@@ -52,6 +52,26 @@ export const notifications = {
     api.patch<NotificationPreferences>('/v1/notifications/preferences', body),
 };
 
+export const deviceLinks = {
+  /** Unauthenticated — the browser has no session yet. */
+  request: (device_name: string) =>
+    api.post<{ code: string; expires_in: number }>(
+      '/v1/devices/link-requests',
+      { platform: 'web', device_name },
+      { anonymous: true },
+    ),
+
+  /** Returns the token pair exactly once, on the poll that sees the approval. */
+  poll: (code: string) =>
+    api.get<{
+      status: 'pending' | 'approved' | 'gone';
+      access_token?: string;
+      refresh_token?: string;
+      user_id?: string;
+      device_id?: string;
+    }>(`/v1/devices/link-requests/${code}`),
+};
+
 export const auth = {
   logout: () => api.post<{ ok: boolean }>('/v1/auth/logout'),
 };

@@ -3,8 +3,9 @@ import QRCode from 'qrcode';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button, Spinner } from '../components/primitives';
-import { useSession } from '../store/session';
+import { deviceLinks } from '../lib/endpoints';
 import { useTheme } from '../lib/theme';
+import { useSession } from '../store/session';
 
 /**
  * Pairing.
@@ -27,6 +28,32 @@ import { useTheme } from '../lib/theme';
  */
 
 const CODE_LIFETIME_SECONDS = 60;
+
+/** A human-readable name for this browser, shown on the phone before approval. */
+function describeBrowser(): string {
+  const ua = navigator.userAgent;
+  const browser = /Edg\//.test(ua)
+    ? 'Edge'
+    : /Chrome\//.test(ua)
+      ? 'Chrome'
+      : /Safari\//.test(ua)
+        ? 'Safari'
+        : /Firefox\//.test(ua)
+          ? 'Firefox'
+          : 'Browser';
+
+  const os = /Windows/.test(ua)
+    ? 'Windows'
+    : /Mac OS/.test(ua)
+      ? 'macOS'
+      : /Linux/.test(ua)
+        ? 'Linux'
+        : /Android/.test(ua)
+          ? 'Android'
+          : 'this device';
+
+  return `${browser} on ${os}`;
+}
 
 type PairState = 'requesting' | 'waiting' | 'expired' | 'confirming' | 'error';
 
@@ -52,18 +79,13 @@ export default function PairScreen() {
     setSecondsLeft(CODE_LIFETIME_SECONDS);
 
     try {
-      // TODO(backend): POST /v1/devices/link-requests is not built yet — the
-      // `device_link_requests` table exists but the endpoints do not. Until it
-      // lands, a placeholder payload is rendered so the flow and the visual
-      // design are complete and reviewable.
-      const payload = JSON.stringify({
-        v: 1,
-        // Random, single-use, never derived from anything guessable.
-        code: crypto.randomUUID(),
-        origin: location.origin,
-      });
+      // Name the browser so the phone can show what it is about to authorise.
+      const { code, expires_in } = await deviceLinks.request(describeBrowser());
+      setSecondsLeft(expires_in);
 
-      const dataUrl = await QRCode.toDataURL(payload, {
+      // The QR carries the raw code and nothing else. Anything extra would
+      // only be another thing to validate on the phone.
+      const dataUrl = await QRCode.toDataURL(code, {
         errorCorrectionLevel: 'M',
         // Chunky and high-contrast: this is read by a phone camera at arm's
         // length, often at an angle, sometimes on a dim laptop screen.
@@ -79,12 +101,29 @@ export default function PairScreen() {
       setState('waiting');
 
       pollTimer.current = window.setInterval(async () => {
-        // Poll for the phone's confirmation. Replace with the real endpoint
-        // when it exists; the shape below is what `adopt` expects.
-        //
-        //   const result = await api.get(`/v1/devices/link-requests/${code}`);
-        //   if (result.approved) { stopPolling(); setState('confirming');
-        //                          await adopt(result.tokens); }
+        try {
+          const result = await deviceLinks.poll(code);
+
+          if (result.status === 'approved' && result.access_token) {
+            stopPolling();
+            setState('confirming');
+            await adopt({
+              access_token: result.access_token,
+              refresh_token: result.refresh_token!,
+              user_id: result.user_id!,
+              device_id: result.device_id!,
+            });
+            return;
+          }
+
+          if (result.status === 'gone') {
+            stopPolling();
+            setState('expired');
+          }
+        } catch {
+          // A dropped poll is not fatal — the interval simply tries again.
+          // Only the countdown ends the attempt.
+        }
       }, 2_000);
     } catch {
       setState('error');
