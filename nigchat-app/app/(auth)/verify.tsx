@@ -133,6 +133,12 @@ export default function VerifyScreen() {
             </Text>
           ) : null}
 
+          {debugCode ? (
+            <Text variant="caption" tone="muted" center style={{ marginTop: spacing.base }}>
+              Development mode — the code was filled in for you.
+            </Text>
+          ) : null}
+
           <Pressable onPress={resend} highlight={false} style={styles.resend}>
             <Text variant="subhead" tone={countdown > 0 ? 'muted' : 'primary'} center>
               {countdown > 0 ? `Resend code in ${countdown}s` : 'Resend code'}

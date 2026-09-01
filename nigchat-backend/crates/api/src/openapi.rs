@@ -8,6 +8,9 @@ use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
 use crate::error::{ErrorDetail, ErrorResponse};
+use crate::routes::device_links::{
+    ApproveLinkResponse, CreateLinkRequest, CreateLinkResponse, LinkStatusResponse,
+};
 use crate::routes::dto::*;
 
 #[derive(OpenApi)]
@@ -68,11 +71,16 @@ never on `message`** — messages are for humans and may be reworded.
         crate::routes::users::update_me,
         crate::routes::users::get_user,
         crate::routes::users::sync_contacts,
+        crate::routes::users::privacy,
+        crate::routes::users::update_privacy,
         crate::routes::users::block,
         crate::routes::users::unblock,
         crate::routes::users::list_devices,
         crate::routes::users::revoke_device,
         crate::routes::users::register_push_token,
+        crate::routes::device_links::create,
+        crate::routes::device_links::poll,
+        crate::routes::device_links::approve,
         crate::routes::users::security_events,
         crate::routes::users::set_two_step_pin,
         crate::routes::users::disable_two_step,
@@ -106,8 +114,9 @@ never on `message`** — messages are for humans and may be reworded.
         ErrorResponse, ErrorDetail, OkResponse, SeqResponse,
         RequestOtpRequest, RequestOtpResponse, VerifyOtpRequest, RefreshRequest,
         TokenPairResponse,
-        MeResponse, PublicUserResponse, UpdateProfileRequest, ContactSyncRequest, BlockRequest, SetTwoStepPinRequest, VerifyPinRequest,
+        MeResponse, PublicUserResponse, UpdateProfileRequest, ContactSyncRequest, BlockRequest, PrivacySettingsResponse, UpdatePrivacyRequest, SetTwoStepPinRequest, VerifyPinRequest,
         DeviceResponse, RegisterPushTokenRequest,
+        CreateLinkRequest, CreateLinkResponse, LinkStatusResponse, ApproveLinkResponse,
         ConversationResponse, ConversationSummaryResponse, CreateDirectRequest,
         CreateGroupRequest, AddMembersRequest, SetRoleRequest, MuteRequest, MarkReadRequest, MarkDeliveredRequest,
         MessageResponse, SendMessageRequest, EditMessageRequest, ReactionRequest, MessagePage,
@@ -137,18 +146,12 @@ struct BearerAuth;
 impl Modify for BearerAuth {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         if let Some(components) = openapi.components.as_mut() {
+            // utoipa 4.x exposes `Http::new(scheme)`; the fluent builder was
+            // only added in 5.x. The bearer format is documented in the
+            // description instead, which renders identically in Swagger UI.
             components.add_security_scheme(
                 "bearer",
-                SecurityScheme::Http(
-                    Http::builder()
-                        .scheme(HttpAuthScheme::Bearer)
-                        .bearer_format("JWT")
-                        .description(Some(
-                            "Access token from /v1/auth/verify-otp. Valid for 15 minutes; \
-                             refresh on a 401 with code `unauthorized` and retry once.",
-                        ))
-                        .build(),
-                ),
+                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
             );
         }
     }

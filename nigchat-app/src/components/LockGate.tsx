@@ -92,7 +92,7 @@ export function LockGate({ children }: { children: React.ReactNode }) {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <Image
-        source={require('../../assets/images/logo-mark.png')}
+        source={require('../../assets/logo-mark.png')}
         style={styles.logo}
         contentFit="contain"
       />

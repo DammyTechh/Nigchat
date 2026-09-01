@@ -8,6 +8,9 @@ Rust · Axum · PostgreSQL · Redis · Clean Architecture · End-to-end encrypte
 
 ---
 
+> **Windows: start with [RUNBOOK.md](./RUNBOOK.md)** — step by step, no `make`
+> required, including secret generation, migrations and a smoke test.
+
 ## Run it in three commands
 
 ```bash
@@ -52,7 +55,7 @@ call in `crates/api/src/ws.rs` and the `tower-http` layer names in
 
 | | |
 |---|---|
-| Rust | 1.79 (pinned in `rust-toolchain.toml`) |
+| Rust | 1.85+ (the dependency tree uses edition 2024) |
 | PostgreSQL | 16, with `citext` and `pg_trgm` |
 | Redis | 7 |
 | Docker | optional, for the full stack |
@@ -265,6 +268,15 @@ means a retried dispatch cannot buzz a phone twice. Dead tokens are retired
 automatically on APNs 410 / FCM 404, and after ten consecutive transient failures.
 
 ---
+
+## Going to production
+
+**[PRODUCTION-PLAN.md](./PRODUCTION-PLAN.md)** — what ships this week, what each
+remaining feature actually costs, and concrete picks for SMS, database and
+hosting. It starts with an honest timeline, including where the "one week" ask
+does not survive contact with the work.
+
+`render.yaml` is committed and ready; secrets are prompted for in the dashboard.
 
 ## Audit
 

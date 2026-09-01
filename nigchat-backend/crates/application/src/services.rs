@@ -20,6 +20,7 @@ pub struct Services {
     pub messages: Arc<dyn MessageRepository>,
     pub notifications: Arc<dyn NotificationRepository>,
     pub security: Arc<dyn SecurityRepository>,
+    pub device_links: Arc<dyn DeviceLinkRepository>,
 
     // services
     pub clock: Arc<dyn Clock>,

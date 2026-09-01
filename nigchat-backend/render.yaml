@@ -1,0 +1,74 @@
+# Render deployment.
+#
+# Secrets are declared with `sync: false`, which means Render prompts for them
+# in the dashboard and never stores them in this file. Do not put real values
+# here — this file belongs in git.
+
+services:
+  - type: web
+    name: nigchat-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # Not the free tier. It sleeps after inactivity, which for a chat app means
+    # every WebSocket drops and the first request after a sleep takes ~30s.
+    plan: starter
+    region: frankfurt          # measure Lagos latency before settling on this
+    healthCheckPath: /healthz
+    autoDeploy: true
+
+    envVars:
+      - key: BIND_ADDR
+        value: 0.0.0.0:8080
+      - key: ENVIRONMENT
+        value: production
+      - key: RUST_LOG
+        value: nigchat_server=info,nigchat_api=info,tower_http=warn,sqlx=warn
+
+      # Managed Postgres and Redis, or paste external URLs (Supabase, Upstash).
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_MAX_CONNECTIONS
+        value: "10"
+      - key: REDIS_URL
+        sync: false
+
+      # openssl rand -hex 32, twice. They must differ.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: HASH_PEPPER
+        generateValue: true
+      - key: ACCESS_TOKEN_TTL_SECONDS
+        value: "900"
+
+      # The server refuses to start if this is true outside development.
+      - key: OTP_DEBUG_ECHO
+        value: "false"
+      # Swagger describes every endpoint and its auth model. Useful internally,
+      # unnecessary exposure in public.
+      - key: ENABLE_DOCS
+        value: "false"
+
+      # Render terminates TLS at its edge and sets X-Forwarded-For, so the
+      # per-IP rate limits can trust it here. Never enable this on a directly
+      # reachable server.
+      - key: TRUST_PROXY_HEADERS
+        value: "true"
+
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false          # e.g. https://app.nigchat.com
+
+      - key: SMS_ENDPOINT
+        value: https://api.ng.termii.com/api/sms/send
+      - key: SMS_API_KEY
+        sync: false
+      - key: SMS_SENDER_ID
+        value: NigChat
+
+      - key: FCM_PROJECT_ID
+        sync: false
+      - key: FCM_ACCESS_TOKEN
+        sync: false
+      - key: APNS_TOPIC
+        sync: false
+      - key: APNS_AUTH_TOKEN
+        sync: false

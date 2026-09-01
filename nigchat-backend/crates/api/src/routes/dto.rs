@@ -141,6 +141,36 @@ pub struct UpdateProfileRequest {
     pub avatar_media_id: Option<Uuid>,
 }
 
+/// Who can see what, and what you leak by looking.
+#[derive(Serialize, ToSchema)]
+pub struct PrivacySettingsResponse {
+    /// everyone | contacts | nobody
+    pub last_seen: String,
+    pub profile_photo: String,
+    pub about: String,
+    pub status: String,
+    /// When false, the server stops broadcasting your read markers — and you
+    /// stop seeing other people's. The trade is symmetric by design.
+    pub read_receipts_enabled: bool,
+    pub typing_indicators_enabled: bool,
+    pub who_can_add_to_groups: String,
+    pub who_can_call: String,
+    pub silence_unknown_callers: bool,
+}
+
+#[derive(Deserialize, ToSchema, Default)]
+pub struct UpdatePrivacyRequest {
+    pub last_seen: Option<String>,
+    pub profile_photo: Option<String>,
+    pub about: Option<String>,
+    pub status: Option<String>,
+    pub read_receipts_enabled: Option<bool>,
+    pub typing_indicators_enabled: Option<bool>,
+    pub who_can_add_to_groups: Option<String>,
+    pub who_can_call: Option<String>,
+    pub silence_unknown_callers: Option<bool>,
+}
+
 #[derive(Deserialize, ToSchema)]
 pub struct ContactSyncRequest {
     /// Peppered hashes, not raw numbers: the server must not learn the phone

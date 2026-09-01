@@ -1,13 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { Alert } from 'react-native';
-
-import { Header, Icon, ListRow, Screen, Section, Text } from '../../src/components';
+import { users as usersApi } from '../../src/api/endpoints';
+import type { PrivacySettings, Visibility } from '../../src/api/types';
+import {
+  Header,
+  Icon,
+  ListRow,
+  Screen,
+  Section,
+  SkeletonRow,
+  Text,
+} from '../../src/components';
 import { appLock, getCapability } from '../../src/utils/biometrics';
 import { spacing, useColors } from '../../src/theme';
-
-type Visibility = 'everyone' | 'contacts' | 'nobody';
+import { Alert } from 'react-native';
 
 const LABELS: Record<Visibility, string> = {
   everyone: 'Everyone',
@@ -15,28 +22,45 @@ const LABELS: Record<Visibility, string> = {
   nobody: 'Nobody',
 };
 
+/** Cycles everyone → contacts → nobody. A picker sheet is the right long-term
+ *  control, but three states cycle acceptably and avoid a modal for one tap. */
+function next(value: Visibility): Visibility {
+  return value === 'everyone' ? 'contacts' : value === 'contacts' ? 'nobody' : 'everyone';
+}
+
 export default function PrivacyScreen() {
   const colors = useColors();
-  const [lastSeen, setLastSeen] = useState<Visibility>('contacts');
-  const [photo, setPhoto] = useState<Visibility>('contacts');
-  const [about, setAbout] = useState<Visibility>('contacts');
-  const [readReceipts, setReadReceipts] = useState(true);
-  const [typing, setTyping] = useState(true);
-  const [groups, setGroups] = useState<Visibility>('contacts');
 
-  // Biometrics are a device capability, not an account setting — read the
-  // hardware rather than assuming Face ID exists.
+  const [settings, setSettings] = useState<PrivacySettings | null>(null);
   const [lockEnabled, setLockEnabled] = useState(false);
   const [biometric, setBiometric] = useState({ available: false, label: 'your screen lock' });
 
   useEffect(() => {
-    getCapability().then((capability) =>
-      setBiometric({ available: capability.available, label: capability.label }),
-    );
+    usersApi.privacy().then(setSettings).catch(() => {});
+    getCapability().then((c) => setBiometric({ available: c.available, label: c.label }));
     appLock.isEnabled().then(setLockEnabled);
   }, []);
 
-  async function toggleAppLock(next: boolean) {
+  /**
+   * Optimistic, then reconciled with what the server returns.
+   *
+   * A settings toggle that waits for a round trip feels broken on a slow
+   * connection, and these are enforced server-side anyway — the response is
+   * the truth, so a rejected change simply snaps back.
+   */
+  async function update(patch: Partial<PrivacySettings>) {
+    if (!settings) return;
+    const previous = settings;
+    setSettings({ ...settings, ...patch });
+
+    try {
+      setSettings(await usersApi.updatePrivacy(patch));
+    } catch {
+      setSettings(previous);
+    }
+  }
+
+  async function toggleAppLock(on: boolean) {
     if (!biometric.available) {
       Alert.alert(
         'Not available',
@@ -44,64 +68,107 @@ export default function PrivacyScreen() {
       );
       return;
     }
-    // Both directions require a successful scan. Allowing either without one
-    // would make the lock theatre.
-    const ok = next ? await appLock.enable() : await appLock.disable();
-    if (ok) setLockEnabled(next);
+    const ok = on ? await appLock.enable() : await appLock.disable();
+    if (ok) setLockEnabled(on);
   }
 
-  const cycle = (value: Visibility): Visibility =>
-    value === 'everyone' ? 'contacts' : value === 'contacts' ? 'nobody' : 'everyone';
+  if (!settings) {
+    return (
+      <Screen edges={['top', 'bottom']}>
+        <Header title="Privacy" back />
+        {Array.from({ length: 6 }).map((_, i) => (
+          <SkeletonRow key={i} />
+        ))}
+      </Screen>
+    );
+  }
 
   return (
     <Screen edges={['top', 'bottom']} scroll>
       <Header title="Privacy" back />
 
       <View style={{ paddingHorizontal: spacing.base, paddingTop: spacing.base }}>
-        <Section title="Who can see">
+        <Section
+          title="Who can see"
+          footer="These are applied on the server, not by the app. Someone running a modified client still cannot see what you have hidden — it is never sent to them."
+        >
           <ListRow
             icon="Eye"
             title="Last seen and online"
-            value={LABELS[lastSeen]}
+            value={LABELS[settings.last_seen]}
             chevron
-            onPress={() => setLastSeen(cycle(lastSeen))}
+            onPress={() => update({ last_seen: next(settings.last_seen) })}
           />
           <ListRow
             icon="Image"
             title="Profile photo"
-            value={LABELS[photo]}
+            value={LABELS[settings.profile_photo]}
             chevron
-            onPress={() => setPhoto(cycle(photo))}
+            onPress={() => update({ profile_photo: next(settings.profile_photo) })}
           />
           <ListRow
             icon="Info"
             title="About"
-            value={LABELS[about]}
+            value={LABELS[settings.about]}
             chevron
-            onPress={() => setAbout(cycle(about))}
+            onPress={() => update({ about: next(settings.about) })}
+          />
+          <ListRow
+            icon="CircleDashed"
+            title="Status"
+            value={LABELS[settings.status]}
+            chevron
+            onPress={() => update({ status: next(settings.status) })}
           />
           <ListRow
             icon="UsersRound"
-            title="Adding to groups"
-            value={LABELS[groups]}
+            title="Adding me to groups"
+            value={LABELS[settings.who_can_add_to_groups]}
             chevron
-            onPress={() => setGroups(cycle(groups))}
+            onPress={() => update({ who_can_add_to_groups: next(settings.who_can_add_to_groups) })}
           />
         </Section>
 
         <Section
           title="Activity"
-          footer="Turning off read receipts also means you cannot see when others have read your messages. It does not apply to group chats."
+          footer="With read receipts off, nobody sees when you have read a message — and you stop seeing when they have read yours. The trade is deliberate and symmetric. It does not apply to group chats."
         >
           <ListRow
             icon="CheckCheck"
             title="Read receipts"
-            toggle={{ value: readReceipts, onChange: setReadReceipts }}
+            subtitle="Let people see when you have read their message"
+            toggle={{
+              value: settings.read_receipts_enabled,
+              onChange: (v) => update({ read_receipts_enabled: v }),
+            }}
           />
           <ListRow
             icon="PenLine"
             title="Typing indicators"
-            toggle={{ value: typing, onChange: setTyping }}
+            subtitle="Show when you are writing"
+            toggle={{
+              value: settings.typing_indicators_enabled,
+              onChange: (v) => update({ typing_indicators_enabled: v }),
+            }}
+          />
+        </Section>
+
+        <Section title="Calls">
+          <ListRow
+            icon="Phone"
+            title="Who can call me"
+            value={LABELS[settings.who_can_call]}
+            chevron
+            onPress={() => update({ who_can_call: next(settings.who_can_call) })}
+          />
+          <ListRow
+            icon="BellOff"
+            title="Silence unknown callers"
+            subtitle="They still appear in your call list"
+            toggle={{
+              value: settings.silence_unknown_callers,
+              onChange: (v) => update({ silence_unknown_callers: v }),
+            }}
           />
         </Section>
 
@@ -109,7 +176,7 @@ export default function PrivacyScreen() {
           title="Device lock"
           footer={
             biometric.available
-              ? `${biometric.label} protects this device only. It is not a second password for your account, and it does not change how your messages are encrypted.`
+              ? `${biometric.label} protects this device only. It is not a second password for your account, and it does not change how messages are encrypted.`
               : 'Set a screen lock in your phone settings to use app lock.'
           }
         >
@@ -119,24 +186,13 @@ export default function PrivacyScreen() {
             subtitle="Ask every time you open NigChat"
             toggle={{ value: lockEnabled, onChange: toggleAppLock }}
           />
-          <ListRow
-            icon="Lock"
-            title="Locked chats"
-            subtitle="Hide individual chats behind a scan"
-            chevron
-            onPress={() => {}}
-          />
-        </Section>
-
-        <Section title="Contacts">
-          <ListRow icon="UserX" title="Blocked contacts" value="0" chevron onPress={() => {}} />
         </Section>
 
         <View style={{ flexDirection: 'row', gap: spacing.md, marginBottom: spacing.xxl }}>
           <Icon name="Lock" size={16} color={colors.textMuted} />
           <Text variant="footnote" tone="muted" style={{ flex: 1 }}>
-            Your messages are end-to-end encrypted regardless of these settings. They control
-            what other people can see about you, not what we can read — we cannot read any of it.
+            These settings control what other people can see about you. They are separate
+            from message encryption, which applies regardless.
           </Text>
         </View>
       </View>

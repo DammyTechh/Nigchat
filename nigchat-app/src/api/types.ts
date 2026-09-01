@@ -129,6 +129,22 @@ export interface NotificationPreferences {
   quiet_hours: QuietHours | null;
 }
 
+export type Visibility = 'everyone' | 'contacts' | 'nobody';
+
+export interface PrivacySettings {
+  last_seen: Visibility;
+  profile_photo: Visibility;
+  about: Visibility;
+  status: Visibility;
+  /** Off means the server never broadcasts your read marker — and you stop
+   *  seeing other people's. The trade is symmetric. */
+  read_receipts_enabled: boolean;
+  typing_indicators_enabled: boolean;
+  who_can_add_to_groups: Visibility;
+  who_can_call: Visibility;
+  silence_unknown_callers: boolean;
+}
+
 export interface SecurityEvent {
   event_type: string;
   severity: 'info' | 'warning' | 'critical';

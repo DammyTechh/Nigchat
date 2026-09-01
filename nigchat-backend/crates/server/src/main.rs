@@ -86,6 +86,7 @@ async fn main() -> anyhow::Result<()> {
         messages: repositories.messages.clone(),
         notifications: repositories.notifications.clone(),
         security: repositories.security.clone(),
+        device_links: repositories.device_links.clone(),
         clock: Arc::new(SystemClock),
         rate_limiter: Arc::new(RedisRateLimiter::new(redis.clone())),
         events: Arc::new(RedisEventPublisher::new(
@@ -121,9 +122,15 @@ async fn main() -> anyhow::Result<()> {
         .await
         .with_context(|| format!("could not bind {}", config.bind_addr))?;
 
-    tracing::info!(addr = %config.bind_addr, "listening");
+    // 0.0.0.0 means "every interface" — it is a bind address, not something a
+    // browser can open. Logging it verbatim sends people to
+    // http://0.0.0.0:8080 and an ERR_ADDRESS_INVALID, so print a URL that
+    // actually works.
+    let browsable = format!("http://localhost:{}", config.bind_addr.port());
+
+    tracing::info!(bind = %config.bind_addr, url = %browsable, "listening");
     if config.enable_docs {
-        tracing::info!("API documentation at http://{}/docs", config.bind_addr);
+        tracing::info!("API documentation at {browsable}/docs");
     }
 
     axum::serve(listener, app)

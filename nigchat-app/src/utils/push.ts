@@ -18,6 +18,10 @@ import { devices } from '../api/endpoints';
 // so the client's job is only to present it.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
+    // `shouldShowAlert` was split into banner + list. Both are set, and the
+    // deprecated key is kept so the file still behaves on older SDKs.
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,

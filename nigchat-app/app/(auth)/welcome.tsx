@@ -36,7 +36,7 @@ export default function Welcome() {
     <Screen scroll padded edges={['top', 'bottom']}>
       <View style={styles.hero}>
         <Image
-          source={require('../../assets/images/logo-full.png')}
+          source={require('../../assets/logo-full.png')}
           style={{ width: compact ? 150 : 190, height: compact ? 145 : 183 }}
           contentFit="contain"
         />

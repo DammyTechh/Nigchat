@@ -2,7 +2,10 @@
 
 use std::time::Duration;
 
+use axum::extract::Request;
 use axum::http::{header, HeaderValue, Method};
+use axum::middleware::{self, Next};
+use axum::response::Response;
 use axum::routing::{delete, get, patch, post, put};
 use axum::Router;
 use tower_http::compression::CompressionLayer;
@@ -38,7 +41,11 @@ pub fn build_router(state: ApiState, config: RouterConfig) -> Router {
         .route("/readyz", get(health::readyz))
         .route("/v1/auth/request-otp", post(auth::request_otp))
         .route("/v1/auth/verify-otp", post(auth::verify_otp))
-        .route("/v1/auth/refresh", post(auth::refresh));
+        .route("/v1/auth/refresh", post(auth::refresh))
+        // Pairing: the browser has no session yet, so creating and polling a
+        // code are unauthenticated. Approving is not — see below.
+        .route("/v1/devices/link-requests", post(device_links::create))
+        .route("/v1/devices/link-requests/:code", get(device_links::poll));
 
     // Everything below requires a valid access token. Authentication is
     // enforced by the `CurrentUser` extractor in each handler's signature, so
@@ -46,12 +53,17 @@ pub fn build_router(state: ApiState, config: RouterConfig) -> Router {
     let authenticated = Router::new()
         .route("/v1/auth/logout", post(auth::logout))
         .route("/v1/me", get(users::me).patch(users::update_me))
+        .route("/v1/me/privacy", get(users::privacy).patch(users::update_privacy))
         .route("/v1/me/blocks", post(users::block))
         .route("/v1/me/blocks/:user_id", delete(users::unblock))
         .route("/v1/me/devices", get(users::list_devices))
         .route("/v1/me/devices/push-token", post(users::register_push_token))
         .route("/v1/me/devices/:device_id", delete(users::revoke_device))
         .route("/v1/me/security-events", get(users::security_events))
+        .route(
+            "/v1/devices/link-requests/:code/approve",
+            post(device_links::approve),
+        )
         .route(
             "/v1/me/two-step",
             post(users::set_two_step_pin).delete(users::disable_two_step),
@@ -149,16 +161,51 @@ pub fn build_router(state: ApiState, config: RouterConfig) -> Router {
             header::REFERRER_POLICY,
             HeaderValue::from_static("no-referrer"),
         ))
-        .layer(SetResponseHeaderLayer::overriding(
-            header::CONTENT_SECURITY_POLICY,
-            HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
-        ))
+        .layer(middleware::from_fn(content_security_policy))
         // This is an API: nothing it returns should ever sit in a shared cache.
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
             HeaderValue::from_static("no-store"),
         ))
         .with_state(state)
+}
+
+/// Content-Security-Policy, chosen per path.
+///
+/// The API itself gets `default-src 'none'` — it returns JSON and should never
+/// be able to load a script, a font or an image. That is the right policy and
+/// it stays.
+///
+/// Swagger UI cannot live under it. It is a real web page served from this same
+/// origin, and it loads its own stylesheet, bundle and initialiser, so
+/// `default-src 'none'` blocks every one of them and renders a blank page. It
+/// also uses inline styles, which is why `'unsafe-inline'` appears for styles
+/// only — never for scripts.
+///
+/// Scoping the relaxation to `/docs` keeps the weaker policy off every endpoint
+/// that actually handles user data.
+const API_CSP: &str = "default-src 'none'; frame-ancestors 'none'";
+
+const DOCS_CSP: &str = concat!(
+    "default-src 'self'; ",
+    "script-src 'self' 'unsafe-inline'; ",
+    "style-src 'self' 'unsafe-inline'; ",
+    "img-src 'self' data:; ",
+    "font-src 'self'; ",
+    "connect-src 'self'; ",
+    "frame-ancestors 'none'",
+);
+
+async fn content_security_policy(request: Request, next: Next) -> Response {
+    let is_docs = request.uri().path().starts_with("/docs");
+
+    let mut response = next.run(request).await;
+    response.headers_mut().insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(if is_docs { DOCS_CSP } else { API_CSP }),
+    );
+
+    response
 }
 
 /// An explicit allow-list, never `permissive`. A wildcard here would let any

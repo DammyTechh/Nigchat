@@ -56,6 +56,14 @@ pub trait UserRepository: Send + Sync {
 
     async fn privacy_settings(&self, id: UserId) -> DomainResult<PrivacySettings>;
 
+    /// Partial update — `None` leaves a field alone, so two devices changing
+    /// different settings do not clobber each other.
+    async fn update_privacy_settings(
+        &self,
+        id: UserId,
+        update: PrivacyUpdate,
+    ) -> DomainResult<PrivacySettings>;
+
     async fn set_two_step_pin(&self, id: UserId, pin_hash: Option<&str>) -> DomainResult<()>;
     async fn two_step_pin_hash(&self, id: UserId) -> DomainResult<Option<String>>;
 
@@ -63,6 +71,20 @@ pub trait UserRepository: Send + Sync {
     async fn blocked_by_any(&self, user: UserId, candidates: &[UserId]) -> DomainResult<Vec<UserId>>;
     async fn block(&self, blocker: UserId, blocked: UserId) -> DomainResult<()>;
     async fn unblock(&self, blocker: UserId, blocked: UserId) -> DomainResult<()>;
+}
+
+/// Every field optional: absent means "unchanged".
+#[derive(Debug, Clone, Default)]
+pub struct PrivacyUpdate {
+    pub last_seen: Option<Visibility>,
+    pub profile_photo: Option<Visibility>,
+    pub about: Option<Visibility>,
+    pub status: Option<Visibility>,
+    pub read_receipts_enabled: Option<bool>,
+    pub typing_indicators_enabled: Option<bool>,
+    pub who_can_add_to_groups: Option<Visibility>,
+    pub who_can_call: Option<Visibility>,
+    pub silence_unknown_callers: Option<bool>,
 }
 
 #[async_trait]
@@ -367,6 +389,52 @@ pub trait NotificationRepository: Send + Sync {
         provider: Option<&str>,
         error: Option<&str>,
     ) -> DomainResult<bool>;
+}
+
+/// QR device linking (spec §11).
+///
+/// The web client cannot sign itself in — there is no password to type. It asks
+/// for a short-lived code, shows it as a QR, and waits. The phone scans it and
+/// approves, which is what mints the browser's session.
+#[async_trait]
+pub trait DeviceLinkRepository: Send + Sync {
+    /// Stores a hash of the code, never the code itself: a database leak must
+    /// not let anyone claim a pending link.
+    async fn create(
+        &self,
+        code_hash: &str,
+        platform: &str,
+        device_name: Option<&str>,
+        expires_at: DateTime<Utc>,
+    ) -> DomainResult<()>;
+
+    async fn find_pending(&self, code_hash: &str) -> DomainResult<Option<PendingLink>>;
+
+    /// Marks the request approved and records which user approved it.
+    /// Returns false if it was already claimed or has expired — the check and
+    /// the write are one statement, so two phones cannot both approve.
+    async fn approve(&self, code_hash: &str, user_id: UserId, device_id: DeviceId)
+        -> DomainResult<bool>;
+
+    /// Consumed by the waiting browser exactly once, then deleted.
+    async fn consume(&self, code_hash: &str) -> DomainResult<Option<ApprovedLink>>;
+
+    /// Housekeeping for abandoned codes.
+    async fn purge_expired(&self) -> DomainResult<u64>;
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingLink {
+    pub platform: String,
+    pub device_name: Option<String>,
+    pub expires_at: DateTime<Utc>,
+    pub approved: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ApprovedLink {
+    pub user_id: UserId,
+    pub device_id: DeviceId,
 }
 
 #[async_trait]

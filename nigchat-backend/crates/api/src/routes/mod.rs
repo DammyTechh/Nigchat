@@ -2,6 +2,7 @@
 
 pub mod auth;
 pub mod conversations;
+pub mod device_links;
 pub mod dto;
 pub mod health;
 pub mod keys;

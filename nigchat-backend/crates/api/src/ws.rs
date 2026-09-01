@@ -278,6 +278,11 @@ pub fn spawn_bus_listener(state: ApiState, redis_url: String) {
     });
 }
 
+// `get_async_connection` is deprecated in favour of the multiplexed
+// connection, but a multiplexed connection cannot enter pub/sub mode — the
+// dedicated `get_async_pubsub` helper only exists from redis 0.27. Revisit when
+// the crate is upgraded.
+#[allow(deprecated)]
 async fn listen_once(state: &ApiState, redis_url: &str) -> anyhow::Result<()> {
     // A dedicated connection: Redis pub/sub puts the socket into subscriber
     // mode, where normal commands are rejected, so it cannot be shared with

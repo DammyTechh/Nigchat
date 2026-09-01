@@ -23,7 +23,11 @@ macro_rules! typed_id {
                 Self(Uuid::now_v7())
             }
 
-            pub fn as_uuid(&self) -> Uuid {
+            /// Takes `self`, not `&self`: these ids are `Copy`, and an
+            /// owned receiver lets `Option::map(Id::as_uuid)` and
+            /// `iter().copied().map(Id::as_uuid)` be written directly
+            /// instead of wrapping each one in a closure.
+            pub fn as_uuid(self) -> Uuid {
                 self.0
             }
         }

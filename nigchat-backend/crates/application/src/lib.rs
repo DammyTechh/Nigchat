@@ -13,6 +13,7 @@
 
 pub mod auth;
 pub mod conversations;
+pub mod device_links;
 pub mod devices;
 pub mod keys;
 pub mod messaging;

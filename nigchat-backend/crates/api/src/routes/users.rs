@@ -4,7 +4,8 @@
 use axum::extract::{Path, State};
 use axum::Json;
 use nigchat_application::devices::RegisterPushTokenCommand;
-use nigchat_domain::entities::PushProvider;
+use nigchat_domain::entities::{PushProvider, Visibility};
+use nigchat_domain::ports::PrivacyUpdate;
 use nigchat_domain::ids::{DeviceId, MediaId, UserId};
 use nigchat_domain::values::Username;
 use nigchat_domain::DomainError;
@@ -155,6 +156,96 @@ pub async fn sync_contacts(
             .map(PublicUserResponse::from)
             .collect(),
     ))
+}
+
+/// Get my privacy settings
+#[utoipa::path(
+    get, path = "/v1/me/privacy", tag = "users", security(("bearer" = [])),
+    responses((status = 200, body = PrivacySettingsResponse))
+)]
+pub async fn privacy(
+    State(state): State<ApiState>,
+    user: CurrentUser,
+) -> ApiResult<Json<PrivacySettingsResponse>> {
+    let settings = state
+        .services
+        .users
+        .privacy_settings(user.user_id)
+        .await
+        .map_err(ApiError)?;
+
+    Ok(Json(to_privacy_response(settings)))
+}
+
+/// Update my privacy settings
+///
+/// Omitted fields are left alone, so two devices changing different settings
+/// cannot clobber each other.
+///
+/// These are enforced server-side, not by the clients. Turning off read
+/// receipts stops the server broadcasting your read marker at all — a modified
+/// client cannot see it, because it is never sent.
+#[utoipa::path(
+    patch, path = "/v1/me/privacy", tag = "users", security(("bearer" = [])),
+    request_body = UpdatePrivacyRequest,
+    responses(
+        (status = 200, body = PrivacySettingsResponse),
+        (status = 400, description = "Unknown visibility value", body = crate::error::ErrorResponse),
+    )
+)]
+pub async fn update_privacy(
+    State(state): State<ApiState>,
+    user: CurrentUser,
+    Json(body): Json<UpdatePrivacyRequest>,
+) -> ApiResult<Json<PrivacySettingsResponse>> {
+    fn visibility(value: Option<String>) -> ApiResult<Option<Visibility>> {
+        match value.as_deref() {
+            None => Ok(None),
+            Some("everyone") => Ok(Some(Visibility::Everyone)),
+            Some("contacts") => Ok(Some(Visibility::Contacts)),
+            Some("nobody") => Ok(Some(Visibility::Nobody)),
+            Some(other) => Err(ApiError(DomainError::validation(format!(
+                "unknown visibility '{other}' — expected everyone, contacts or nobody"
+            )))),
+        }
+    }
+
+    let update = PrivacyUpdate {
+        last_seen: visibility(body.last_seen)?,
+        profile_photo: visibility(body.profile_photo)?,
+        about: visibility(body.about)?,
+        status: visibility(body.status)?,
+        read_receipts_enabled: body.read_receipts_enabled,
+        typing_indicators_enabled: body.typing_indicators_enabled,
+        who_can_add_to_groups: visibility(body.who_can_add_to_groups)?,
+        who_can_call: visibility(body.who_can_call)?,
+        silence_unknown_callers: body.silence_unknown_callers,
+    };
+
+    let settings = state
+        .services
+        .users
+        .update_privacy_settings(user.user_id, update)
+        .await
+        .map_err(ApiError)?;
+
+    Ok(Json(to_privacy_response(settings)))
+}
+
+fn to_privacy_response(
+    settings: nigchat_domain::entities::PrivacySettings,
+) -> PrivacySettingsResponse {
+    PrivacySettingsResponse {
+        last_seen: settings.last_seen.as_str().to_string(),
+        profile_photo: settings.profile_photo.as_str().to_string(),
+        about: settings.about.as_str().to_string(),
+        status: settings.status.as_str().to_string(),
+        read_receipts_enabled: settings.read_receipts_enabled,
+        typing_indicators_enabled: settings.typing_indicators_enabled,
+        who_can_add_to_groups: settings.who_can_add_to_groups.as_str().to_string(),
+        who_can_call: settings.who_can_call.as_str().to_string(),
+        silence_unknown_callers: settings.silence_unknown_callers,
+    }
 }
 
 /// Block a user

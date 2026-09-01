@@ -6,27 +6,11 @@
     "orientation": "default",
     "scheme": "nigchat",
     "userInterfaceStyle": "automatic",
-    "icon": "./assets/images/icon.png",
-    "newArchEnabled": false,
-    "splash": {
-      "image": "./assets/images/splash-light.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
-    },
+    "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nigchat.app",
       "userInterfaceStyle": "automatic",
-      "splash": {
-        "image": "./assets/images/splash-light.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#FFFFFF",
-        "dark": {
-          "image": "./assets/images/splash-dark.png",
-          "resizeMode": "contain",
-          "backgroundColor": "#0B120E"
-        }
-      },
       "infoPlist": {
         "NSCameraUsageDescription": "NigChat uses the camera to scan the pairing code shown on nigchat.com, and to take photos to send.",
         "NSPhotoLibraryUsageDescription": "NigChat needs access to your photos so you can share them in chats.",
@@ -40,7 +24,7 @@
     "android": {
       "package": "com.nigchat.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
       },
       "softwareKeyboardLayoutMode": "pan",
@@ -55,7 +39,7 @@
     },
     "web": {
       "bundler": "metro",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
@@ -69,7 +53,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/notification-icon.png",
+          "icon": "./assets/notification-icon.png",
           "color": "#0E7A46",
           "defaultChannel": "messages"
         }
@@ -77,12 +61,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-light.png",
+          "image": "./assets/splash-light.png",
           "imageWidth": 220,
           "resizeMode": "contain",
           "backgroundColor": "#FFFFFF",
           "dark": {
-            "image": "./assets/images/splash-dark.png",
+            "image": "./assets/splash-dark.png",
             "backgroundColor": "#0B120E"
           }
         }

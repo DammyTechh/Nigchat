@@ -24,8 +24,7 @@ use chrono::{DateTime, FixedOffset, TimeZone, Utc};
 use nigchat_domain::entities::{Conversation, Message, PushProvider};
 use nigchat_domain::ids::{ConversationId, UserId};
 use nigchat_domain::notifications::{
-    NotificationCategory, NotificationContext, NotificationDecision, NotificationPlan,
-    NotificationPolicy, SuppressionReason,
+    NotificationCategory, NotificationContext, NotificationDecision, NotificationPolicy,
 };
 use nigchat_domain::ports::{PushMessage, PushOutcome};
 use nigchat_domain::values::Seq;

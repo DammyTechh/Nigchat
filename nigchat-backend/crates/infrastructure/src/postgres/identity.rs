@@ -304,6 +304,58 @@ impl UserRepository for PgUserRepository {
         })
     }
 
+    /// COALESCE per column, so an absent field keeps its stored value. The
+    /// alternative — read, merge in Rust, write back — loses a concurrent
+    /// change made from another device between the read and the write.
+    async fn update_privacy_settings(
+        &self,
+        id: UserId,
+        update: PrivacyUpdate,
+    ) -> DomainResult<PrivacySettings> {
+        sqlx::query(
+            r#"
+            INSERT INTO user_privacy_settings (user_id) VALUES ($1)
+            ON CONFLICT DO NOTHING
+            "#,
+        )
+        .bind(id.as_uuid())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+
+        sqlx::query(
+            r#"
+            UPDATE user_privacy_settings
+            SET last_seen_visibility        = COALESCE($2, last_seen_visibility),
+                profile_photo_visibility    = COALESCE($3, profile_photo_visibility),
+                about_visibility            = COALESCE($4, about_visibility),
+                status_visibility           = COALESCE($5, status_visibility),
+                read_receipts_enabled       = COALESCE($6, read_receipts_enabled),
+                typing_indicators_enabled   = COALESCE($7, typing_indicators_enabled),
+                who_can_add_to_groups       = COALESCE($8, who_can_add_to_groups),
+                who_can_call                = COALESCE($9, who_can_call),
+                silence_unknown_callers     = COALESCE($10, silence_unknown_callers),
+                updated_at                  = now()
+            WHERE user_id = $1
+            "#,
+        )
+        .bind(id.as_uuid())
+        .bind(update.last_seen.map(|v| v.as_str()))
+        .bind(update.profile_photo.map(|v| v.as_str()))
+        .bind(update.about.map(|v| v.as_str()))
+        .bind(update.status.map(|v| v.as_str()))
+        .bind(update.read_receipts_enabled)
+        .bind(update.typing_indicators_enabled)
+        .bind(update.who_can_add_to_groups.map(|v| v.as_str()))
+        .bind(update.who_can_call.map(|v| v.as_str()))
+        .bind(update.silence_unknown_callers)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+
+        self.privacy_settings(id).await
+    }
+
     async fn set_two_step_pin(&self, id: UserId, pin_hash: Option<&str>) -> DomainResult<()> {
         sqlx::query(
             r#"
@@ -353,7 +405,7 @@ impl UserRepository for PgUserRepository {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
-        let ids: Vec<Uuid> = candidates.iter().map(UserId::as_uuid).collect();
+        let ids: Vec<Uuid> = candidates.iter().copied().map(UserId::as_uuid).collect();
 
         let rows: Vec<Uuid> = sqlx::query_scalar(
             "SELECT blocker_id FROM blocks WHERE blocked_id = $1 AND blocker_id = ANY($2)",

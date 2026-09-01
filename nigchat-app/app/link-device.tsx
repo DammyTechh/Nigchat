@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
+import { deviceLinks } from '../src/api/endpoints';
 import { Button, Glass, Header, Icon, Screen, Text } from '../src/components';
 import { radius, spacing, useColors } from '../src/theme';
 
@@ -19,7 +20,11 @@ export default function LinkDeviceScreen() {
   const colors = useColors();
   const { width } = useWindowDimensions();
   const [permission, requestPermission] = useCameraPermissions();
-  const [state, setState] = useState<'scanning' | 'confirming' | 'done'>('scanning');
+  const [state, setState] = useState<'scanning' | 'confirming' | 'linking' | 'done'>(
+    'scanning',
+  );
+  const [code, setCode] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const handled = useRef(false);
 
   // The reticle scales with the screen so it looks right on an SE and an iPad.
@@ -69,34 +74,61 @@ export default function LinkDeviceScreen() {
   }
 
   if (state !== 'scanning') {
+    const linked = state === 'done';
+
     return (
       <Screen edges={['top', 'bottom']}>
         <Header title="Link a device" back />
         <View style={styles.permission}>
           <View style={[styles.permissionIcon, { backgroundColor: colors.primarySoft }]}>
-            <Icon name="MonitorSmartphone" size={26} color={colors.primary} strokeWidth={1.8} />
+            <Icon
+              name={linked ? 'CircleCheck' : 'MonitorSmartphone'}
+              size={26}
+              color={colors.primary}
+              strokeWidth={1.8}
+            />
           </View>
+
           <Text variant="titleSmall" center style={{ marginTop: spacing.base }}>
-            Link this computer?
+            {linked ? 'Device linked' : 'Link this computer?'}
           </Text>
-          <Text variant="subhead" tone="muted" center style={{ marginTop: spacing.xs, maxWidth: 320 }}>
-            It will be able to read and send messages from your account until you sign it out.
-            Only continue if the code came from a screen you can see.
+
+          <Text
+            variant="subhead"
+            tone="muted"
+            center
+            style={{ marginTop: spacing.xs, maxWidth: 320 }}
+          >
+            {linked
+              ? 'Your chats are loading on the other screen.'
+              : 'It will be able to read and send messages from your account until you sign it out. Only continue if the code is on a screen in front of you.'}
           </Text>
-          <Button
-            label="Link device"
-            fullWidth
-            size="lg"
-            onPress={() => router.back()}
-            style={{ marginTop: spacing.xl }}
-          />
-          <Button
-            label="Cancel"
-            variant="ghost"
-            fullWidth
-            onPress={() => router.back()}
-            style={{ marginTop: spacing.sm }}
-          />
+
+          {error ? (
+            <Text variant="footnote" tone="danger" center style={{ marginTop: spacing.base }}>
+              {error}
+            </Text>
+          ) : null}
+
+          {!linked && (
+            <>
+              <Button
+                label="Link device"
+                fullWidth
+                size="lg"
+                loading={state === 'linking'}
+                onPress={confirmLink}
+                style={{ marginTop: spacing.xl }}
+              />
+              <Button
+                label="Cancel"
+                variant="ghost"
+                fullWidth
+                onPress={() => router.back()}
+                style={{ marginTop: spacing.sm }}
+              />
+            </>
+          )}
         </View>
       </Screen>
     );

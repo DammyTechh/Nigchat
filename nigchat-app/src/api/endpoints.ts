@@ -1,6 +1,7 @@
 import { api } from './client';
 import type {
   Conversation,
+  PrivacySettings,
   ConversationSummary,
   Device,
   Me,
@@ -47,6 +48,10 @@ export const users = {
   unblock: (userId: string) => api.delete<{ ok: boolean }>(`/v1/me/blocks/${userId}`),
   securityEvents: () => api.get<SecurityEvent[]>('/v1/me/security-events'),
 
+  privacy: () => api.get<PrivacySettings>('/v1/me/privacy'),
+  updatePrivacy: (body: Partial<PrivacySettings>) =>
+    api.patch<PrivacySettings>('/v1/me/privacy', body),
+
   /** Two-step verification (spec §14). Changing an existing PIN requires it. */
   setTwoStepPin: (pin: string, current_pin?: string) =>
     api.post<{ ok: boolean }>('/v1/me/two-step', { pin, current_pin }),
@@ -64,6 +69,15 @@ export const devices = {
     is_voip?: boolean;
     sandbox?: boolean;
   }) => api.post<{ ok: boolean }>('/v1/me/devices/push-token', body),
+};
+
+export const deviceLinks = {
+  /** Called after scanning the QR shown by the web client. The caller's own
+   *  session is what authorises the browser. */
+  approve: (code: string) =>
+    api.post<{ linked: boolean; device_id: string }>(
+      `/v1/devices/link-requests/${code}/approve`,
+    ),
 };
 
 export const conversations = {

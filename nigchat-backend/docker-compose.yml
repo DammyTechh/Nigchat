@@ -12,7 +12,11 @@ services:
       POSTGRES_USER: nigchat
       POSTGRES_PASSWORD: nigchat
       POSTGRES_DB: nigchat
-    ports: ["5432:5432"]
+    # 5433 on the host: port 5432 is very often already taken by a Postgres
+    # installed directly on the machine, and "port is already allocated" is a
+    # confusing first error. Inside the compose network the port is still 5432,
+    # so api-1/api-2 are unaffected.
+    ports: ["5433:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U nigchat"]

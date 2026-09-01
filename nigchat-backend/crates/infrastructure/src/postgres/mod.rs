@@ -11,6 +11,7 @@
 //!   duplicating it here would let the two copies drift apart.
 
 mod conversations;
+mod device_links;
 mod identity;
 mod keys;
 mod notifications;
@@ -35,6 +36,7 @@ pub struct PostgresRepositories {
     pub messages: Arc<dyn MessageRepository>,
     pub notifications: Arc<dyn NotificationRepository>,
     pub security: Arc<dyn SecurityRepository>,
+    pub device_links: Arc<dyn DeviceLinkRepository>,
 }
 
 impl PostgresRepositories {
@@ -56,6 +58,7 @@ impl PostgresRepositories {
             sessions: Arc::new(identity::PgSessionRepository::new(pool.clone())),
             challenges: Arc::new(identity::PgChallengeRepository::new(pool.clone())),
             security: Arc::new(identity::PgSecurityRepository::new(pool.clone())),
+            device_links: Arc::new(device_links::PgDeviceLinkRepository::new(pool.clone())),
             keys: Arc::new(keys::PgKeyRepository::new(pool.clone())),
             conversations: Arc::new(conversations::PgConversationRepository::new(pool.clone())),
             messages: Arc::new(conversations::PgMessageRepository::new(pool.clone())),

@@ -228,7 +228,8 @@ impl ConversationRepository for PgConversationRepository {
         // in the picker cannot fail the whole creation.
         let member_ids: Vec<Uuid> = members
             .iter()
-            .filter(|id| **id != creator)
+            .copied()
+            .filter(|id| *id != creator)
             .map(UserId::as_uuid)
             .collect();
 
@@ -426,7 +427,7 @@ impl ConversationRepository for PgConversationRepository {
         if members.is_empty() {
             return Ok(Vec::new());
         }
-        let ids: Vec<Uuid> = members.iter().map(UserId::as_uuid).collect();
+        let ids: Vec<Uuid> = members.iter().copied().map(UserId::as_uuid).collect();
 
         // The capacity check lives in the same statement as the insert, so two
         // concurrent adds cannot both pass a check-then-insert and overshoot.
@@ -680,7 +681,7 @@ impl MessageRepository for PgMessageRepository {
         };
 
         if !message.mentions.is_empty() {
-            let mention_ids: Vec<Uuid> = message.mentions.iter().map(UserId::as_uuid).collect();
+            let mention_ids: Vec<Uuid> = message.mentions.iter().copied().map(UserId::as_uuid).collect();
             sqlx::query(
                 r#"
                 INSERT INTO message_mentions (message_id, mentioned_user_id)
